@@ -12,7 +12,6 @@ module ALU (val1, val2, instr, aluOut);
       8'b00010001: aluOut <= val1 + val2; //ldw
       8'b00010010: aluOut <= val1 + val2; ///stb
       8'b00010011: aluOut <= val1 + val2; ///stw
-      8'b00010100: ;//mov
       8'b00110000: aluOut <= (val1 = val2) ? 1 : 0; //beq
       8'b00110001: aluOut <= val1 + val2; //jump r1 + offset
       8'b00110010: ;//tlbwrite
