@@ -10,8 +10,8 @@ module decode_top
     input   logic                               stall_decode,
 
     // Fetched instruction
-    input   logic   [`FETCH_INSTR_DATA-1:0]     fetch_instr_valid,
-    input   logic   [`FETCH_INSTR_DATA-1:0]     fetch_instr_data,
+    input   logic                               fetch_instr_valid,
+    input   logic   [`INSTR_WIDTH-1:0]          fetch_instr_data,
 
     // Instruction to ALU
     output  logic                               dec_instr_valid,

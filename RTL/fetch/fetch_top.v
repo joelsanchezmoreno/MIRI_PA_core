@@ -16,8 +16,8 @@ module fetch_top
     input   logic                               stall_fetch,
 
     // Fetched instruction
-    output  logic   [`FETCH_INSTR_DATA-1:0]     instr_data,
-    output  logic   [`FETCH_INSTR_DATA-1:0]     instr_valid
+    output  logic   [`INSTR_WIDTH-1:0]          decode_instr_data,
+    output  logic                               decode_instr_valid
  );
 
 logic   [`PC_WIDTH-1:0] program_counter;
@@ -27,34 +27,24 @@ logic                   program_counter_update;
 //         CLK    RST      EN                      DOUT             DIN                   DEF
 `RST_EN_FF(clock, reset_c, program_counter_update, program_counter, program_counter_next, boot_addr)
 
-assign program_counter_update   = ( stall_fetch ) ? 1'b0 : 1'b1;
-
-always_comb
-begin
-    program_counter_next = ( take_branch ) ? branch_pc : 
-                                             program_counter + 4;
-end
+assign program_counter_update   = ( stall_fetch | !icache_ready) ? 1'b0 : 1'b1;
+assign program_counter_next     = ( take_branch ) ? branch_pc : 
+                                                    program_counter + 4;
 
 // Request to the Instruction Cache
-logic                               icache_req_valid;
+logic icache_req_valid;
+logic icache_ready;
+
+assign icache_req_valid = !stall_fetch & icache_ready;
 
 // Response from the Instruction Cache
 logic                               icache_rsp_valid;
 logic   [`ICACHE_LINE_WIDTH-1:0]    icache_rsp_data;
 
-// Data for the next stage
-logic   [`FETCH_INSTR_DATA-1:0]     instr_data_next;
-
-//     CLK    RST      DOUT            DIN
-`EN_FF(clock, reset_c, instr_data, instr_data_next)
-
-//      CLK    RST      DOUT             DIN                     DEF
-`RST_FF(clock, reset_c, dec_instr_valid, program_counter_update, 1'b0)
-
-// TODO: HOW TO SEND INSTR FROM ICACHE LINE TO DECODER  -> RAW DATA NOT PROCESSED
 always_comb
 begin
-    instr_data_next = XXXX; // FIXME
+    decode_instr_valid  = icache_rsp_valid;
+    decode_instr_data   = icache_rsp_data[program_counter[`ICACHE_INSTR_IN_LINE]];
 end
 
 // Request to the memory hierarchy
@@ -68,9 +58,10 @@ logic                            rsp_valid_miss;
 instruction_cache
 icache(
     // System signals
-    .clock      ( clock             ),
-    .reset      ( reset             ),
-
+    .clock              ( clock             ),
+    .reset              ( reset             ),
+    .icache_ready       ( icache_ready      ),
+    
     // Request from the core pipeline
     .req_valid          ( icache_req_valid  ),
     .req_addr           ( program_counter   ),
@@ -90,6 +81,7 @@ icache(
 
 // Logic to emulate main memory latency
 logic [`MAIN_MEMORY_LAT_LOG-1:0] mem_rsp_count, mem_rsp_count_ff ;
+
 //      CLK    RST    DOUT              DIN           DEF
 `RST_FF(clock, reset, mem_rsp_count_ff, mem_rsp_count, '0)
 
@@ -108,6 +100,31 @@ begin
         end
     end
 end
+
+//FIXME: Create module
+instruction_tlb
+itlb
+(
+    // System signals
+    .clock              ( clock             ),
+    .reset              ( reset             ),
+
+    // Request from the core pipeline
+    .req_valid          (                   ),
+    .req_addr           (                   ),
+
+    // Response to the core pipeline
+    .rsp_valid          (                   ),
+    .rsp_data           (                   ),
+    
+    // Request to the memory hierarchy
+    .req_addr_miss      (                   ),
+    .req_valid_miss     (                   ),
+                    
+    // Response from the memory hierarchy
+    .rsp_data_miss      (                   ),
+    .rsp_valid_miss     (                   )
+);
 
 endmodule
 
