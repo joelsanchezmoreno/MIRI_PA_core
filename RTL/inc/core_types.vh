@@ -20,7 +20,6 @@ typedef struct packed
     logic   [`REG_FILE_RANGE]       ra;         // Source register A (rs1)
     logic   [`DEC_RB_OFF_WIDTH-1:0] rb_offset;  // Source register B (rs2) or Offset value
     logic   [`INSTR_OPCODE-1:0]     opcode;     // Operation code
-    logic   [`DEC_FUNC3_WIDTH-1:0]  funct3;
 } dec_instruction_info;
 
 typedef struct packed 

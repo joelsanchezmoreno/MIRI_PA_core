@@ -1,30 +1,51 @@
-module regFile (clk, rst, src1, src2, dest, writeVal, writeEn, reg1, reg2, rmPC; rmAddr, excV);
-  input clk, rst, writeEn;
-  input [4:0] src1, src2, dest;
-  input [31:0] writeVal;
-  output [31:0] reg1, reg2;
+module regFile (
+  input logic clock,
+  input logic reset, 
+  input logic writeEn,
 
-  reg [31:0] regMem [4:0];
-  reg [31:0] rm0;
-  reg [31:0] rm1;
+  input logic [`REG_FILE_ADDR_RANGE] src1, 
+  input logic [`REG_FILE_ADDR_RANGE] src2, 
+  input logic [`REG_FILE_ADDR_RANGE] dest,
+
+  input  logic [`REG_FILE_RANGE] writeVal,
+  output logic [`REG_FILE_RANGE] reg1, 
+  output logic [`REG_FILE_RANGE] reg2,
+
+  input logic excV,
+  input logic [`PC_WIDTH-1:0] rmPC,
+  input logic [`REG_FILE_ADDR_RANGE] rmAddr
+
+);
+
+  logic [`REG_FILE_RANGE] regMem [`REG_FILE_ADDR_RANGE];
+  logic [`REG_FILE_RANGE] rm0;
+  logic [`REG_FILE_RANGE] rm1;
+
+
+  logic [`REG_FILE_RANGE] regMem_ff [`REG_FILE_ADDR_RANGE];
+  logic [`REG_FILE_RANGE] rm0_ff;
+  logic [`REG_FILE_RANGE] rm1_ff;
+
+  //      CLK    RST      DOUT     DIN     DEF
+  `RST_FF(clock, reset, regMem_ff, regMem, '0)
+  `RST_FF(clock, reset, rm0_ff, rm0, '0)
+  `RST_FF(clock, reset, rm1_ff, rm1, '0)
+
 
   integer i;
-
-  always @ (posedge clk) begin
-    if (rst) begin
-      rm0 <= 0;
-      rm1 <= 0;
-      for (i = 0; i < 31; i = i + 1)
-        regMem[i] <= 0;
-    end
-
-    else if (writeEn) regMem[dest] <= writeVal;
-    else if (excV) 
-	    rm0 <= rmPC;
-    	    rm1 <= rmAddr;
+  always_comb
+  begin
+	rm0 = rm0_ff;
+	rm1 = rm1_ff;
+	regMem = regMem_ff;
+	if (writeEn) regMem[dest] = writeVal;	
+	if (excV)
+	begin	
+          rm0 = rmPC;
+          rm1 = rmAddr;
+ 	end
+  	reg1 = (regMem_ff[src1]);
+	reg2 = (regMem_ff[src2]);
   end
-
-  assign reg1 = (regMem[src1]);
-  assign reg2 = (regMem[src2]);
 
 endmodule 
