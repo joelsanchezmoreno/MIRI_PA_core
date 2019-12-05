@@ -11,11 +11,14 @@
 // Register file defines
 `define REG_FILE_WIDTH      32
 `define REG_FILE_RANGE      REG_FILE_WIDTH-1:0
+`define REG_FILE_NUM_REGS   32
+`define REG_FILE_ADDR_WIDTH $clog2(`REG_FILE_NUM_REGS)
+`define REG_FILE_ADDR_RANGE REG_FILE_ADDR_WIDTH-1:0
 
 // Instruction defines
 `define INSTR_OPCODE        7
 `define INSTR_OFFSET        20
-`define INSTR_WIDTH         32
+`define INSTR_WIDTH         40 
 
 // Instruction cache defines
 `define ICACHE_ADDR_WIDTH   `PC_WIDTH

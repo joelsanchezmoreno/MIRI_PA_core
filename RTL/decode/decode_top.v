@@ -15,11 +15,21 @@ module decode_top
 
     // Instruction to ALU
     output  logic                               dec_instr_valid,
-    output  dec_instruction_info                dec_instr_info
+    output  dec_instruction_info                dec_instr_info,
+
+    input logic [`REG_FILE_RANGE] 		writeValRF,
+    input logic 				writeEnRF,
+    input logic [`REG_FILE_ADDR_RANGE] 		destRF,
+
+    input logic 				excV,
+    input logic [`PC_WIDTH-1:0] 		rmPC,
+    input logic [`REG_FILE_ADDR_RANGE] 		rmAddr
 );
 
 logic   dec_instr_update;
 dec_instruction_info        dec_instr_info_next;
+
+logic [`REG_FILE_RANGE] regA, regB; 
 
 //     CLK    RST      DOUT            DIN
 `EN_FF(clock, reset_c, dec_instr_info, dec_instr_info_next)
@@ -27,38 +37,52 @@ dec_instruction_info        dec_instr_info_next;
 //      CLK    RST      DOUT            DIN                  DEF
 `RST_FF(clock, reset_c, dec_instr_valid, dec_instr_update, 1'b0)
 
-assign dec_instr_update = ( stall_decode ) ? 1'b0 : 1'b1;
+assign dec_instr_update = ( stall_decode || !fetch_instr_valid) ? 1'b0 : 1'b1;
 
 //TODO: Finish encoding and ask Roger the instructions really needed
 always_comb
 begin
-// risc-v 32I ISA
-    dec_instr_info_next.opcode    = fetch_instr_data[6:0];
-    dec_instr_info_next.rd        = fetch_instr_data[11:7];
-    dec_instr_info_next.funct3    = fetch_instr_data[14:12];
-    dec_instr_info_next.ra        = fetch_instr_data[19:15];
+    dec_instr_info_next = '0;
+    dec_instr_info_next.opcode    = fetch_instr_data[31:25];
+    dec_instr_info_next.rd        = fetch_instr_data[24:20];
+    dec_instr_info_next.ra        = regA;
 
-    if ( dec_instr_info_next.opcode < XXX ) // R-format
+    if ( dec_instr_info_next.opcode == 8'h0X) // R-format
     begin
-        dec_instr_info_next.rb_offset = `ZX(`DEC_RB_OFF_WIDTH,fetch_instr_data[24:20]);
+        dec_instr_info_next.rb_offset = `ZX(`DEC_RB_OFF_WIDTH,regB);
     end
-    else if ( dec_instr_info_next.opcode < XXX ) // I-format
+    else if ( dec_instr_info_next.opcode == 8'h1X ) // M-format
     begin
-        dec_instr_info_next.rb_offset = `ZX(`DEC_RB_OFF_WIDTH,fetch_instr_data[31:20]);
+        dec_instr_info_next.rb_offset = `ZX(`DEC_RB_OFF_WIDTH,fetch_instr_data[14:0]);
     end
-    else if ( dec_instr_info_next.opcode < XXX ) // S-format
+    else if ( dec_instr_info_next.opcode == 8'h3X ) // B-format
     begin
-        // These instructions have 12b of offset and src2 register. We encode
-        // them in the struct such as: {3'b000,12b'offset, 5b'rs2}
-        dec_instr_info_next.rb_offset = `ZX(`DEC_RB_OFF_WIDTH, {fetch_instr_data[31:25],   // imm[11:5]
-                                                                fetch_instr_data[11:7],    // imm[4:0]
-                                                                fetch_instr_data[24:20]}); // register source 2
-    end
-    else // U-format
-    begin
-        dec_instr_info_next.rb_offset = fetch_instr_data[31:12];
+	    if (dec_instr_info_next.opcode == 8'h30) // BEQ CASE
+	        dec_instr_info_next.rb_offset = `ZX(`DEC_RB_OFF_WIDTH, {fetch_instr_data[24:20], fetch_instr_data[9:0]}); 
+	    else if (dec_instr_info_next.opcode == 8'h31) // JUMP CASE
+	        dec_instr_info_next.rb_offset = `ZX(`DEC_RB_OFF_WIDTH, {fetch_instr_data[24:20], fetch_instr_data[14:0]}); 
     end
 end
 
+regFile 
+registerFile
+(
+  .clock     (clock),
+  .reset     (reset),
+  .writeEn   (writeEnRF),
+
+  .src1      (fetch_instr_data[19:15]),
+  .src2      (fetch_instr_data[14:10]),
+  .dest	     (fetch_instr_data[24:20]),
+
+  .writeVal  (writeValRF),
+  .reg1	     (regA),
+  .reg2      (regB),
+
+  .excV	     (excV),
+  .rmPC	     (rmPC),
+  .rmAddr    (rmAddr)
+
+);
 endmodule
 
