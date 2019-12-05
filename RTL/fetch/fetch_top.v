@@ -79,6 +79,9 @@ icache(
     .rsp_valid_miss     ( rsp_valid_miss    )
 );
 
+
+// FIXME: MOVE TO CORE_WRAPPER SINCE ICACHE AND DCACHE SHOULD BE ARBITRED,
+// DCACHE HAS PRIORITY
 // Logic to emulate main memory latency
 logic [`MAIN_MEMORY_LAT_LOG-1:0] mem_rsp_count, mem_rsp_count_ff ;
 
