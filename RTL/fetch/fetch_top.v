@@ -44,7 +44,8 @@ logic   [`ICACHE_LINE_WIDTH-1:0]    icache_rsp_data;
 always_comb
 begin
     decode_instr_valid  = icache_rsp_valid;
-    decode_instr_data   = icache_rsp_data[program_counter[`ICACHE_INSTR_IN_LINE]];
+    word_in_line        = program_counter[`ICACHE_INSTR_IN_LINE];
+    decode_instr_data   = icache_rsp_data[`INSTR_WIDTH*word_in_line+:`INSTR_WIDTH];
 end
 
 // Request to the memory hierarchy

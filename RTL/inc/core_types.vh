@@ -1,3 +1,5 @@
+`ifndef _CORE_TYPES_
+`define _CORE_TYPES_
 ////////////////////////////////////////////////////////////////////////////////
 // ENUMS
 ////////////////////////////////////////////////////////////////////////////////
@@ -29,3 +31,29 @@ typedef struct packed
     logic                                       error; //error found
     logic   [`SC_MESH_SLAVE_AXI_ID_SIZE-1:0]    axi_id; //id of axi req
 } alu_ctrl;
+
+typedef struct packed 
+{
+    logic [`DCACHE_ADDR_WIDTH-1:0]   addr;
+    logic [`WORD_WIDTH-1:0]          size;     // maximum size is word (32b)
+    logic                            is_store; // asserted when request is a store
+    logic [`DCACHE_MAX_ACC_SIZE-1:0] data;
+} dcache_request_t;
+
+typedef struct packed 
+{
+    logic [`DCACHE_ADDR_WIDTH-1:0]      addr;
+    logic                               is_store; // asserted when request is a store
+    logic [`MAIN_MEMORY_LINE_WIDTH-1:0] data;
+} memory_request_t;
+
+typedef struct packed 
+{
+    logic [`DCACHE_ADDR_WIDTH-1:0]      tag;
+    logic [`DCACHE_ADDR_WIDTH-1:0]      set; 
+    logic [`WORD_WIDTH-1:0]             size;
+    logic [`DCACHE_MAX_ACC_SIZE-1:0]    data;
+} store_buffer_t;
+
+`endif // _CORE_TYPES_
+
