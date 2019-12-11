@@ -50,20 +50,13 @@ logic [`DCACHE_NUM_WAYS-1:0]    dCache_valid, dCache_valid_ff;
 logic tag_miss;     // asserted when there is a miss on the instr. cache
 logic tag_store;    // asserted if we need to store the TAG for next stages
 
+logic [`DCACHE_NUM_WAY_RANGE]       hit_way;  
+
 //////////////////////////////////////////////////
 // Store Buffer signals 
-store_buffer_t store_buffer_info,store_buffer_info_ff;
-store_buffer_t store_buffer_valid,store_buffer_valid_ff;
-
-//  CLK    DOUT                  DIN       
-`FF(clock, store_buffer_info_ff, store_buffer_info )
-
-//      CLK    RST    DOUT                   DIN                 DEF
-`RST_FF(clock, reset, store_buffer_valid_ff, store_buffer_valid, '0)
-
+store_buffer_t  store_buffer_info;
 logic store_buffer_perform;
 logic store_buffer_pending;
-assign store_buffer_pending = |store_buffer_valid; 
 assign store_buffer_perform = store_buffer_pending & !req_valid & dcache_ready;
 
 //////////////////////////////////////////////////
@@ -81,7 +74,7 @@ logic [`DCACHE_OFFSET_WIDTH-1:0]    req_addr_offset, req_addr_offset_ff;
 
 //////////////////////////////////////////////////
 // Position of the victim to be evicted from the D$
-logic [`DCACHE_NUM_SET_WIDTH-1:0] miss_dcache_set_ff;  
+logic [`DCACHE_NUM_SET_WIDTH-1:0] req_addr_set, miss_dcache_set_ff;  
 logic [`DCACHE_NUM_WAY_WIDTH-1:0] miss_dcache_way, miss_dcache_way_ff;  
 
 //         CLK    RST    EN        DOUT                DIN              DEF
@@ -115,14 +108,18 @@ dcache_stages dcache_state, dcache_state_ff;
 always_comb
 begin
     // Mantain values for next clock
+        // Control signals
+    dcache_ready_next   = dcache_ready;
+    dcache_state        = dcache_state_ff;
+
+        // Cache arrays
     dCache_valid        = dCache_valid_ff;
     dCache_tag          = dCache_tag_ff;
     dCache_data         = dCache_data_ff;
     dCache_dirty        = dCache_dirty_ff;
-    dcache_ready_next   = dcache_ready;
-    dcache_state        = dcache_state_ff;
 
     tag_miss            = 1'b0;
+    hit_way             = '0;
     tag_store           = 1'b1;
     xcpt_address_fault  = 1'b0;
 
@@ -134,6 +131,7 @@ begin
             tag_miss        = 1'b1;
             req_addr_pos    = '0; 
 
+            // If there is a new request
             if ( req_valid )
             begin
                 // Compute the tag and set for the given address 
@@ -156,6 +154,7 @@ begin
                         begin
                             req_addr_pos    = iter + req_addr_set*`DCACHE_WAYS_PER_SET;
                             tag_miss        = 1'b0;
+                            hit_way         = iter;
                         end
                     end
                     
@@ -221,6 +220,20 @@ begin
                     end // !tag_miss
                 end // !exception
             end // req_valid
+
+            // If there is no valid request this cycle we check the Store
+            // Buffer status
+            else
+            begin
+                // If dcache is ready and there are pending ST on the buffer
+                if ( store_buffer_perform )
+                begin
+                    // The store buffer LRU module returns the oldest store on
+                    // the buffer
+                    // FIXME: TODO
+                    store_buffer_oldest_pos 
+                end
+            end // !req_valid
         end
 
         evict_line:
@@ -291,22 +304,55 @@ assign rsp_valid = ((dcache_state_ff == idle) & req_valid & !tag_miss ) ? 1'b1 :
                                                                           1'b0;  // default
 
 
+logic [`ICACHE_NUM_SET_RANGE] update_set;  
+logic [`ICACHE_NUM_WAY_RANGE] update_way;  
+logic dcache_hit;
+
+assign icache_hit = !tag_miss & req_valid;
+assign update_set = (rsp_valid_miss) ? miss_dcache_set_ff :
+                    (dcache_hit)     ? req_addr_set       :
+                    '0;
+
+assign update_way = (rsp_valid_miss) ? miss_dcache_way_ff :
+                    (dcache_hit)     ? hit_way            :
+                    '0;              
+// This module returns the oldest way accessed for a given set and updates the
+// the LRU logic when there's a hit on the D$ or we bring a new line                        
 dcache_lru
 dcache_lru
+(
+    // System signals
+    .clock              ( clock             ),
+    .reset              ( reset             ),
+
+    // Info to select the victim
+    .victim_req         ( tag_miss          ),
+    .victim_set         ( req_addr_set      ),
+    .victim_way         ( miss_dcache_way   ),
+
+    // Update the LRU logic
+    .update_req         ( rsp_valid_miss |
+                          dcache_hit        ),
+    .update_set         ( update_set        ),
+    .update_way         ( update_way        )
+);
+
+// FIXME: TODO
+store_buffer
+store_buffer
 (
     // System signals
     .clock              ( clock                 ),
     .reset              ( reset                 ),
 
-    // Info to select the victim
-    .victim_req         ( tag_miss              ),
-    .victim_set         ( req_addr_set          ),
-    .victim_way         ( miss_dcache_way       ),
+    .buffer_empty       ( store_buffer_pending  ),
 
-    // Update the LRU logic
-    .update_req         ( rsp_valid_miss        ),
-    .update_set         ( miss_dcache_set_ff    ),
-    .update_way         ( miss_dcache_way_ff    )
+    // Get the information from the oldest store on the buffer
+    .get_oldest         ( store_buffer_perform  ),
+    .oldest_info        ( store_buffer_info     ),
+
+    // Push a new store to the buffer Update the LRU logic
+    .push_valid         ( rsp_valid_miss        ), // FIXME
+    .push_info          ( miss_dcache_set_ff    )  // FIXME
 );
-
 endmodule 

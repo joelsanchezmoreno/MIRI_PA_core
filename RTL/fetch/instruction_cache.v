@@ -27,9 +27,11 @@ module instruction_cache
     input  logic                            rsp_valid_miss
 );
 
-logic [`ICACHE_LINE_WIDTH-1:0] instMem_data,instMem_data_ff [`ICACHE_NUM_WAYS-1:0];
-logic [`ICACHE_TAG_RANGE]  instMem_tag, instMem_tag_ff  [`ICACHE_NUM_WAYS-1:0];
-logic [`ICACHE_NUM_WAYS-1:0]   instMem_valid, instMem_valid_ff;
+//////////////////////////////////////////////////
+// Instruction Cache arrays: tag, data and valid
+logic [`ICACHE_LINE_WIDTH-1:0]  instMem_data,instMem_data_ff [`ICACHE_NUM_WAYS-1:0];
+logic [`ICACHE_TAG_RANGE]       instMem_tag, instMem_tag_ff  [`ICACHE_NUM_WAYS-1:0];
+logic [`ICACHE_NUM_WAYS-1:0]    instMem_valid, instMem_valid_ff;
 
 //  CLK        DOUT         DIN         
 `FF(clock, instMem_data_ff, instMem_data)
@@ -38,17 +40,25 @@ logic [`ICACHE_NUM_WAYS-1:0]   instMem_valid, instMem_valid_ff;
 //      CLK    RST    DOUT               DIN           DEF
 `RST_FF(clock, reset, instMem_valid_ff, instMem_valid, '0)
 
+//////////////////////////////////////////////////
+// Control signals 
 logic tag_miss; // asserted when there is a miss on the instr. cache
 logic icache_hit;
-logic [`ICACHE_TAG_RANGE]           tag_icache_line; // TAG of the line stored in the icache
+logic [`ICACHE_NUM_WAY_RANGE]       hit_way; 
+logic [`ICACHE_TAG_RANGE]           req_addr_tag;
 logic [`ICACHE_NUM_WAY_RANGE]       req_addr_pos; // Position of the data in case there is a hit on tag array
-logic [`ICACHE_NUM_SET_RANGE]       miss_icache_set_ff; // Position of the victim in case of replacement 
-logic [`ICACHE_NUM_WAY_RANGE]       miss_icache_way, miss_icache_way_ff; // Position of the victim in case of replacement 
+
+//////////////////////////////////////////////////
+// Position of the victim to be evicted from the I$
+logic [`ICACHE_NUM_SET_RANGE]       req_addr_set,miss_icache_set_ff;  
+logic [`ICACHE_NUM_WAY_RANGE]       miss_icache_way, miss_icache_way_ff; 
 
 //         CLK    RST    EN        DOUT                DIN              DEF
 `RST_EN_FF(clock, reset, tag_miss, miss_icache_set_ff, req_addr_set,    '0)
 `RST_EN_FF(clock, reset, tag_miss, miss_icache_way_ff, miss_icache_way, '0)
 
+//////////////////////////////////////////////////
+// Ready signal to stall the pipeline if ICache is busy
 logic icache_ready_next;
 
 //      CLK    RST    DOUT          DIN                DEF
@@ -69,8 +79,9 @@ begin
     req_addr_tag    = req_addr[`ICACHE_TAG_ADDR_RANGE];
     req_addr_set    = req_addr[`ICACHE_SET_ADDR_RANGE]; 
     
-    icache_hit   = 1'b0;
-    req_addr_pos = '0; 
+    icache_hit      = 1'b0;
+    hit_way         = '0;
+    req_addr_pos    = '0; 
 
     // Look if the tag is on the cache
     for (iter = 0; iter < `ICACHE_WAYS_PER_SET; i++)
@@ -80,8 +91,8 @@ begin
         begin
             req_addr_pos      = iter + req_addr_set*`ICACHE_WAYS_PER_SET;
             icache_hit        = 1'b1;
+            hit_way           = iter;
         end
-
     end
     
     // If there is a request from the fetch stage and there is no hit, we
@@ -111,7 +122,7 @@ begin
 end
 
 assign rsp_data  = ( rsp_valid_miss ) ? instMem_data[miss_icache_pos] : // if there is a response for a miss
-                   ( !tag_miss      ) ? instMem_data[req_addr_pos]    : // if we hit on the first access
+                   ( !tag_miss      ) ? instMem_data_ff[req_addr_pos]    : // if we hit on the first access
                                         '0;                             // default
 
 assign rsp_valid = ( rsp_valid_miss ) ? 1'b1 : // if there is a response for a miss
@@ -119,24 +130,37 @@ assign rsp_valid = ( rsp_valid_miss ) ? 1'b1 : // if there is a response for a m
                                         1'b0;  // default
 
 
+logic [`ICACHE_NUM_SET_RANGE] update_set;  
+logic [`ICACHE_NUM_WAY_RANGE] update_way;  
+
+assign update_set = (rsp_valid_miss) ? miss_icache_set_ff :
+                    (icache_hit)     ? req_addr_set       :
+                    '0;
+
+assign update_way = (rsp_valid_miss) ? miss_icache_way_ff :
+                    (icache_hit)     ? hit_way            :
+                    '0;              
+// This module returns the oldest way accessed for a given set and updates the
+// the LRU logic when there's a hit on the I$ or we bring a new line                        
 icache_lru
 icache_lru
 (
     // System signals
-    .clock              ( clock                 ),
-    .reset              ( reset                 ),
+    .clock              ( clock             ),
+    .reset              ( reset             ),
 
     // Info to select the victim
-    .victim_req         ( tag_miss              ),
-    .victim_set         ( req_addr_set          ),
+    .victim_req         ( tag_miss          ),
+    .victim_set         ( req_addr_set      ),
 
     // Victim way
-    .victim_way         ( miss_icache_way       ),
+    .victim_way         ( miss_icache_way   ),
 
     // Update the LRU logic
-    .update_req         ( rsp_valid_miss        ),
-    .update_set         ( miss_icache_set_ff    ),
-    .update_way         ( miss_icache_way_ff    )
+    .update_req         ( rsp_valid_miss |
+                          icache_hit        ),
+    .update_set         ( update_set        ),
+    .update_way         ( update_way        )
 );
 
 endmodule 
