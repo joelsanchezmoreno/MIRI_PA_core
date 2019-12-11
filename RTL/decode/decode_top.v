@@ -27,7 +27,7 @@ module decode_top
 
     // Bypasses
     input logic [`REG_FILE_RANGE]		aluOutBP,
-    input logic [`REG_FILE_RANGE]		memOutBP
+    input logic [`REG_FILE_RANGE]		memOutBP,
 
 );
 
@@ -36,7 +36,13 @@ dec_instruction_info        dec_instr_info_next;
 
 logic [`REG_FILE_ADDR_RANGE] rd_alu;
 logic [`REG_FILE_ADDR_RANGE] rd_alu_2;
+logic [`REG_FILE_ADDR_RANGE] rd_alu_3;
 
+//NEED TO CHECK IF THIS SOLUTION IS FEASIBLE - THE 3RD BP WILL AFFECT ONLY
+//WITH LOADS WHERE WE NEED TO BRING THE VALUE TO ALU FROM MEM
+//AN ALTERNATIVE TO THIS IMPLEMENTATION IS TO BYPASS THE RD ASWELL FROM THE
+//OTHER STAGES, MAYBE THIS ONE WONT WORK (2 AND 3 RD)
+`FF(clock, reset_c, rd_alu_3, rd_alu_2) //3rd Bypass from ALU with dist=3
 `FF(clock, reset_c, rd_alu_2, rd_alu) //2nd Bypass from ALU with dist=2
 `FF(clock, reset_c, rd_alu, fetch_instr_data[24:20])
 
@@ -57,23 +63,23 @@ begin
     dec_instr_info_next = '0;
     dec_instr_info_next.opcode    = fetch_instr_data[31:25];
     dec_instr_info_next.rd        = fetch_instr_data[24:20];
-    dec_instr_info_next.ra        = (rd_alu   == fetch_instr_data[19:15]) ? aluOutBP : //BP ALU -> DECODE DIST = 1 
-	   			    (rd_alu_2 == fetch_instr_data[19:15]) ? memOutBP : //BP ALU -> DECODE DIST = 2
-				    					    regA; //TODO: CHECK CORRECT ORDER, I THINK THIS IS THE CORRECT ORDER SINCE 
-								    		//ALU VALUE IS THE MOST RECENT ONE
+    dec_instr_info_next.ra        = (rd_alu   == fetch_instr_data[19:15]				       ) ? aluOutBP : //BP ALU -> DECODE DIST = 1 
+	   			    (rd_alu_2 == fetch_instr_data[19:15] || rd_alu_3 == fetch_instr_data[19:15]) ? memOutBP : //BP ALU -> DECODE DIST = 2/3
+				    					    					   regA; 
+//TODO: CHECK CORRECT ORDER, I THINK THIS IS THE CORRECT ORDER SINCE ALU VALUE IS THE MOST RECENT ONE
     if ( dec_instr_info_next.opcode == 8'h0X) // R-format
     begin
-        dec_instr_info_next.rb_offset = (rd_alu   == fetch_instr_data[14:10])   ? `ZX(`DEC_RB_OFF_WIDTH, aluOutBP) :
-					(rd_alu_2 == fetch_instr_data[14:10])   ? `ZX(`DEC_RB_OFF_WIDTH, memOutBP) :
-									          `ZX(`DEC_RB_OFF_WIDTH,regB);
+        dec_instr_info_next.rb_offset = (rd_alu   == fetch_instr_data[14:10]					   )   ? `ZX(`DEC_RB_OFF_WIDTH, aluOutBP) :
+					(rd_alu_2 == fetch_instr_data[14:10] || rd_alu_2 == fetch_instr_data[14:10])   ? `ZX(`DEC_RB_OFF_WIDTH, memOutBP) :
+				   										         `ZX(`DEC_RB_OFF_WIDTH,regB);
     end
     else if ( dec_instr_info_next.opcode == 8'h1X ) // M-format
     begin
         dec_instr_info_next.rb_offset = `ZX(`DEC_RB_OFF_WIDTH,fetch_instr_data[14:0]);
 	if (dec_instr_info_next.opcode == 8'h13 || dec_instr_info_next.opcode == 8'h12)//if store, we take rd value or (BP)
-		dec_instr_info_next.rd        = (rd_alu   == fetch_instr_data[24:20]) ? aluOutBP :
-		       				(rd_alu_2 == fetch_instr_data[24:20]) ? memOutBP : 
-											regB;
+		dec_instr_info_next.rd        = (rd_alu   == fetch_instr_data[24:20]					   ) ? aluOutBP :
+		       				(rd_alu_2 == fetch_instr_data[24:20] || rd_alu_3 == fetch_instr_data[24:20]) ? memOutBP : 
+															       regB;
 
     end
     else if ( dec_instr_info_next.opcode == 8'h3X ) // B-format
