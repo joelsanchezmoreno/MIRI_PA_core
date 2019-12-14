@@ -17,15 +17,23 @@ module fetch_top
 
     // Fetched instruction
     output  logic   [`INSTR_WIDTH-1:0]          decode_instr_data,
-    output  logic                               decode_instr_valid
+    output  logic                               decode_instr_valid,
+    
+    // Request to the memory hierarchy
+    output  logic                               req_valid_miss,
+    output  memory_request_t                    req_info_miss,
+
+    // Response from the memory hierarchy
+    input   logic [`ICACHE_LINE_WIDTH-1:0]      rsp_data_miss,
+    input   logic                               rsp_valid_miss
  );
 
 logic   [`PC_WIDTH-1:0] program_counter;
 logic   [`PC_WIDTH-1:0] program_counter_next;
 logic                   program_counter_update;
 
-//         CLK    RST      EN                      DOUT             DIN                   DEF
-`RST_EN_FF(clock, reset_c, program_counter_update, program_counter, program_counter_next, boot_addr)
+//         CLK    RST    EN                      DOUT             DIN                   DEF
+`RST_EN_FF(clock, reset, program_counter_update, program_counter, program_counter_next, boot_addr)
 
 assign program_counter_update   = ( stall_fetch | !icache_ready) ? 1'b0 : 1'b1;
 assign program_counter_next     = ( take_branch ) ? branch_pc : 
@@ -50,11 +58,13 @@ end
 
 // Request to the memory hierarchy
 logic [`ICACHE_ADDR_WIDTH-1:0]   req_addr_miss;
-logic                            req_valid_miss;
 
-// Response from the memory hierarchy
-logic [`ICACHE_LINE_WIDTH-1:0]   rsp_data_miss;
-logic                            rsp_valid_miss;
+always_comb
+begin
+    req_info_miss.addr      = req_addr_miss;
+    req_info_miss.is_store  = 1'b0;
+    req_info_miss.data      = '0;
+end
 
 instruction_cache
 icache(
@@ -81,30 +91,7 @@ icache(
 );
 
 
-// FIXME: MOVE TO CORE_WRAPPER SINCE ICACHE AND DCACHE SHOULD BE ARBITRED,
-// DCACHE HAS PRIORITY
-// Logic to emulate main memory latency
-logic [`MAIN_MEMORY_LAT_LOG-1:0] mem_rsp_count, mem_rsp_count_ff ;
-
-//      CLK    RST    DOUT              DIN           DEF
-`RST_FF(clock, reset, mem_rsp_count_ff, mem_rsp_count, '0)
-
-always_comb
-begin
-    rsp_valid_miss = 1'b0;
-
-    if (req_valid_miss)
-    begin
-        mem_rsp_count = mem_rsp_count_ff + 1'b1;
-        if (mem_rsp_count_ff == `MAIN_MEMORY_LATENCY) )
-        begin
-            rsp_valid_miss   = 1'b1;
-            rsp_data_miss   = XXXX[req_addr_miss]; // FIXME: Maybe we should have a very big array as main memory
-            mem_rsp_count   = '0;
-        end
-    end
-end
-
+/*
 //FIXME: Create module
 instruction_tlb
 itlb
@@ -129,6 +116,7 @@ itlb
     .rsp_data_miss      (                   ),
     .rsp_valid_miss     (                   )
 );
+*/
 
 endmodule
 
