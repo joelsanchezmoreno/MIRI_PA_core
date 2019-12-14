@@ -16,6 +16,16 @@ typedef enum logic [1:0]
     core_alu_func_SUB     = 2'b11  // Sub
 } core_alu_func;
 
+typedef enum logic [1:0] {
+   Byte            = 2'b00, // 8b
+   HWord           = 2'b01, // 16b
+   Word            = 2'b10  // 32b
+} req_size_t;
+
+////////////////////////////////////////////////////////////////////////////////
+// STRUCTS
+////////////////////////////////////////////////////////////////////////////////
+
 typedef struct packed 
 {
     logic   [`REG_FILE_RANGE]       rd;         // Destination register
@@ -34,24 +44,24 @@ typedef struct packed
 
 typedef struct packed 
 {
-    logic [`DCACHE_ADDR_WIDTH-1:0]   addr;
-    logic [`WORD_WIDTH-1:0]          size;     // maximum size is word (32b)
+    logic [`DCACHE_ADDR_RANGE]       addr;
+    req_size_t                       size;
     logic                            is_store; // asserted when request is a store
     logic [`DCACHE_MAX_ACC_SIZE-1:0] data;
 } dcache_request_t;
 
 typedef struct packed 
 {
-    logic [`DCACHE_ADDR_WIDTH-1:0]      addr;
+    logic [`DCACHE_ADDR_RANGE]          addr;
     logic                               is_store; // asserted when request is a store
     logic [`MAIN_MEMORY_LINE_WIDTH-1:0] data;
 } memory_request_t;
 
 typedef struct packed 
 {
-    logic [`DCACHE_ADDR_WIDTH-1:0]      tag;
-    logic [`DCACHE_ADDR_WIDTH-1:0]      set; 
-    logic [`WORD_WIDTH-1:0]             size;
+    logic [`DCACHE_ADDR_RANGE]          addr; 
+    logic [`DCACHE_WAYS_PER_SET_RANGE]  way; 
+    req_size_t                          size;
     logic [`DCACHE_MAX_ACC_SIZE-1:0]    data;
 } store_buffer_t;
 

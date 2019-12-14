@@ -14,12 +14,6 @@
 `define WORD_BITS           32
 `define WORD_WIDTH          $clog2(`WORD_BITS)
 
-// Main memory
-`define MAIN_MEMORY_LATENCY 5 // FIXME: 5 or 10 ?
-`define MAIN_MEMORY_LAT_LOG $clog2(`MAIN_MEMORY_LATENCY)
-
-`define MAIN_MEMORY_LINE_WIDTH  128
-
 ///////////////////////
 // Register file defines
 ///////////////////////
@@ -79,8 +73,11 @@
 // Data cache defines
 ///////////////////////
 `define DCACHE_ADDR_WIDTH       `PC_WIDTH  //FIXME: what should be the @ width
+`define DCACHE_ADDR_RANGE       `DCACHE_ADDR_WIDTH-1:0
 `define DCACHE_LINE_WIDTH       `MAIN_MEMORY_LINE_WIDTH // data
+
 `define DCACHE_MAX_ACC_SIZE     `WORD_BITS // maximum access size is to words
+`define DCACHE_SIZE_WIDTH        $clog2(2)
 
 `define DCACHE_NUM_SET          2
 `define DCACHE_NUM_SET_WIDTH    $clog(`DCACHE_NUM_SET)
@@ -97,17 +94,17 @@
 
 `define DCACHE_BLOCK_SIZE       (`DCACHE_LINE_WIDTH/8)
 `define DCACHE_BLOCK_ADDR_SIZE  $clog2(`DCACHE_BLOCK_SIZE)
-`define DCACHE_INSTR_IN_LINE    5:2
 
 `define DCACHE_TAG_WIDTH        (`DCACHE_ADDR_WIDTH - `DCACHE_NUM_SET_WIDTH - `DCACHE_BLOCK_ADDR_SIZE)
 `define DCACHE_TAG_RANGE        `DCACHE_TAG_WIDTH- 1:0
 
 `define DCACHE_OFFSET_WIDTH      `DCACHE_ADDR_WIDTH-`DCACHE_TAG_WIDTH-`DCACHE_NUM_SET_WIDTH
-`define DCACHE_OFFSET_ADDR_RANGE `DCACHE_BLOCK_ADDR_SIZE+:2
+`define DCACHE_OFFSET_RANGE      `DCACHE_OFFSET_WIDTH-1:0
 
 // Data cache address decoding
 `define DCACHE_TAG_ADDR_RANGE  (`DCACHE_ADDR_WIDTH - 1):(`DCACHE_NUM_SET_WIDTH + `DCACHE_BLOCK_ADDR_SIZE)
-`define DCACHE_SET_ADDR_RANGE  (`DCACHE_BLOCK_ADDR_SIZE+`DCACHE_NUM_SET_WIDTH):`DCACHE_BLOCK_ADDR_SIZE
+`define DCACHE_SET_ADDR_RANGE  (`DCACHE_NUM_SET_WIDTH + `DCACHE_BLOCK_ADDR_SIZE-1):`DCACHE_BLOCK_ADDR_SIZE
+`define DCACHE_OFFSET_ADDR_RANGE `DCACHE_BLOCK_ADDR_SIZE-1:0
 
 // Store Buffer
 `define DCACHE_ST_BUFFER_NUM_ENTRIES    8

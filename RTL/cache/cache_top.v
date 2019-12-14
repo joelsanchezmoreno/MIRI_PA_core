@@ -6,67 +6,67 @@ module cache_top
     input   logic                               clock,
     input   logic                               reset,
 
-    // Branches 
-    input   logic                               take_branch,
-    input   logic   [`PC_WIDTH-1:0]             branch_pc,
+    // Send stall pipeline request
+    output  logic                               dcache_ready, 
 
-    // Stall pipeline
-    input   logic                               stall_fetch,
+    // Receive stall pipeline request
+    input   logic                               stall_pipeline,
 
-    // Fetched instruction
-    output  logic   [`INSTR_WIDTH-1:0]          decode_instr_data,
-    output  logic                               decode_instr_valid
+    // Request from the ALU stage
+    input   logic                               req_valid,
+    input   dcache_request_t                    req_info,
+    input   logic [`REG_FILE_ADDR_RANGE]        load_dst_reg,
+
+    // Bypasses to previous stages
+    output  logic                               write_rf,
+    output  logic [`REG_FILE_ADDR_RANGE]        dest_rf,
+    output  logic [`DCACHE_MAX_ACC_SIZE-1:0]    rsp_data,
+    
+    // Request to the memory hierarchy
+    output  logic                               req_valid_miss,
+    output  memory_request_t                    req_info_miss,
+
+    // Response from the memory hierarchy
+    input   logic [`DCACHE_LINE_WIDTH-1:0]      rsp_data_miss,
+    input   logic                               rsp_valid_miss
  );
 
-logic   [`PC_WIDTH-1:0] program_counter;
-logic   [`PC_WIDTH-1:0] program_counter_next;
-logic                   program_counter_update;
+//////////////////////////////////////////////////
+// Request to the Data Cache
+logic dcache_req_valid;
+assign dcache_req_valid = !stall_pipeline & dcache_ready & req_valid;
 
-//         CLK    RST      EN                      DOUT             DIN                   DEF
-`RST_EN_FF(clock, reset_c, program_counter_update, program_counter, program_counter_next, boot_addr)
+//////////////////////////////////////////////////
+// Logic to write on the RF the LD response
+logic req_is_load;
 
-assign program_counter_update   = ( stall_fetch | !icache_ready) ? 1'b0 : 1'b1;
-assign program_counter_next     = ( take_branch ) ? branch_pc : 
-                                                    program_counter + 4;
+//         CLK    RST    EN         DOUT         DIN                 DEF
+`RST_EN_FF(clock, reset, req_valid, req_is_load, !req_info.is_store, '0)
+`RST_EN_FF(clock, reset, req_valid, dest_rf    , load_dst_reg,       '0)
 
-// Request to the Instruction Cache
-logic icache_req_valid;
-logic icache_ready;
+// In case of LD request we will have to write that data on the RF
+assign write_rf = !stall_pipeline & req_is_load & rsp_valid;
 
-assign icache_req_valid = !stall_fetch & icache_ready;
-
-// Response from the Instruction Cache
-logic                               icache_rsp_valid;
-logic   [`ICACHE_LINE_WIDTH-1:0]    icache_rsp_data;
-
-always_comb
-begin
-    decode_instr_valid  = icache_rsp_valid;
-    decode_instr_data   = icache_rsp_data[program_counter[`ICACHE_INSTR_IN_LINE]];
-end
-
-// Request to the memory hierarchy
-logic [`ICACHE_ADDR_WIDTH-1:0]   req_addr_miss;
-logic                            req_valid_miss;
-
-// Response from the memory hierarchy
-logic [`ICACHE_LINE_WIDTH-1:0]   rsp_data_miss;
-logic                            rsp_valid_miss;
-
-instruction_cache
-icache(
+//////////////////////////////////////////////////
+// Data Cache instance
+data_cache
+dcache
+(
     // System signals
     .clock              ( clock             ),
     .reset              ( reset             ),
-    .icache_ready       ( icache_ready      ),
+    .dcache_ready       ( dcache_ready      ),
+
+    // Exception
+    .xcpt_address_fault ( xcpt_address_fault), //FIXME
     
     // Request from the core pipeline
-    .req_valid          ( icache_req_valid  ),
-    .req_addr           ( program_counter   ),
+    .req_valid          ( dcache_req_valid  ),
+    .req_info           ( req_info          ),
 
     // Response to the core pipeline
-    .rsp_valid          ( icache_rsp_valid  ),
-    .rsp_data           ( icache_rsp_data   ),
+    .rsp_valid          ( rsp_valid         ),
+    .rsp_data           ( rsp_data          ),
     
     // Request to the memory hierarchy
     .req_addr_miss      ( req_addr_miss     ),
@@ -77,33 +77,9 @@ icache(
     .rsp_valid_miss     ( rsp_valid_miss    )
 );
 
-
-// FIXME: MOVE TO CORE_WRAPPER SINCE ICACHE AND DCACHE SHOULD BE ARBITRED,
-// DCACHE HAS PRIORITY
-// Logic to emulate main memory latency
-logic [`MAIN_MEMORY_LAT_LOG-1:0] mem_rsp_count, mem_rsp_count_ff ;
-
-//      CLK    RST    DOUT              DIN           DEF
-`RST_FF(clock, reset, mem_rsp_count_ff, mem_rsp_count, '0)
-
-always_comb
-begin
-    rsp_valid_miss = 1'b0;
-
-    if (req_valid_miss)
-    begin
-        mem_rsp_count = mem_rsp_count_ff + 1'b1;
-        if (mem_rsp_count_ff == `MAIN_MEMORY_LATENCY) )
-        begin
-            rsp_valid_miss   = 1'b1;
-            rsp_data_miss   = XXXX[req_addr_miss]; // FIXME: Maybe we should have a very big array as main memory
-            mem_rsp_count   = '0;
-        end
-    end
-end
-
+/*
 //FIXME: Create module
-instruction_tlb
+data_tlb
 itlb
 (
     // System signals
@@ -126,6 +102,6 @@ itlb
     .rsp_data_miss      (                   ),
     .rsp_valid_miss     (                   )
 );
-
+*/
 endmodule
 
