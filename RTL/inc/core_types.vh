@@ -4,18 +4,6 @@
 // ENUMS
 ////////////////////////////////////////////////////////////////////////////////
 
-// Instruction function
-//
-typedef enum logic [1:0]
-{
-    // ALU pipe operations
-    core_alu_func_X       = 2'bxx, // Don't care 
-    core_alu_func_ADD     = 2'b00, // Add
-    core_alu_func_OR      = 2'b01, // Or
-    core_alu_func_AND     = 2'b10, // And
-    core_alu_func_SUB     = 2'b11  // Sub
-} core_alu_func;
-
 typedef enum logic [1:0] {
    Byte            = 2'b00, // 8b
    HWord           = 2'b01, // 16b
@@ -28,19 +16,13 @@ typedef enum logic [1:0] {
 
 typedef struct packed 
 {
-    logic   [`REG_FILE_RANGE]       rd;         // Destination register
-    logic   [`REG_FILE_RANGE]       ra;         // Source register A (rs1)
-    logic   [`DEC_RB_OFF_WIDTH-1:0] rb_offset;  // Source register B (rs2) or Offset value
-    logic   [`INSTR_OPCODE-1:0]     opcode;     // Operation code
-} dec_instruction_info;
-
-typedef struct packed 
-{
-    logic                                       valid; //active
-    logic   [3:0]                               counter; //rsp counter
-    logic                                       error; //error found
-    logic   [`SC_MESH_SLAVE_AXI_ID_SIZE-1:0]    axi_id; //id of axi req
-} alu_ctrl;
+    logic   [`REG_FILE_ADDR_RANGE]  rd_addr; // Destination register
+    logic   [`REG_FILE_ADDR_RANGE]  ra_addr; // Source register A (rs1)
+    logic   [`REG_FILE_DATA_RANGE]  ra_data; // Source register A (rs1)
+    logic   [`REG_FILE_DATA_RANGE]  rb_data; // Source register B (rs2)
+    logic   [`ALU_OFFSET_RANGE]     offset;  // Offset value
+    logic   [`INSTR_OPCODE_RANGE]   opcode;  // Operation code
+} alu_request_t; ;
 
 typedef struct packed 
 {
@@ -64,6 +46,28 @@ typedef struct packed
     req_size_t                          size;
     logic [`DCACHE_MAX_ACC_SIZE-1:0]    data;
 } store_buffer_t;
+
+
+// Exceptions
+typedef struct packed 
+{
+    logic                   xcpt_fetch_itlb_miss;
+    logic [`PC_WIDTH_RANGE] xcpt_pc;
+} fetch_xcpt_t; //FIXME: add address of the miss???
+
+typedef struct packed 
+{
+    logic                   xcpt_illegal_instr;
+    logic [`PC_WIDTH_RANGE] xcpt_pc;
+} decode_xcpt_t; //FIXME: add opcode ??
+
+typedef struct packed 
+{
+    logic                       xcpt_addr_fault;
+    logic                       xcpt_fetch_dtlb_miss;
+    logic [`DCACHE_ADDR_RANGE]  xcpt_addr_val;
+    logic [`PC_WIDTH_RANGE]     xcpt_pc;
+} cache_xcpt_t; //FIXME: add dTlb address???
 
 `endif // _CORE_TYPES_
 

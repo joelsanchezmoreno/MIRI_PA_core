@@ -8,17 +8,19 @@
 ///////////////////////
 // Global defines
 ///////////////////////
-`define PC_WIDTH            32
-`define PA_WIDTH            20
+`define PC_WIDTH        32
+`define PA_WIDTH        20
 
-`define WORD_BITS           32
-`define WORD_WIDTH          $clog2(`WORD_BITS)
+`define WORD_BITS       32
+`define WORD_WIDTH      $clog2(`WORD_BITS)
+
+`define PC_WIDTH_RANGE  `PC_WIDTH-1:0
 
 ///////////////////////
 // Register file defines
 ///////////////////////
-`define REG_FILE_WIDTH      32
-`define REG_FILE_RANGE      `REG_FILE_WIDTH-1:0
+`define REG_FILE_DATA_WIDTH 32
+`define REG_FILE_DATA_RANGE `REG_FILE_WIDTH-1:0
 `define REG_FILE_NUM_REGS   32
 `define REG_FILE_ADDR_WIDTH $clog2(`REG_FILE_NUM_REGS)
 `define REG_FILE_ADDR_RANGE `REG_FILE_ADDR_WIDTH-1:0
@@ -26,9 +28,57 @@
 ///////////////////////
 // Instruction defines
 ///////////////////////
-`define INSTR_OPCODE        7
+`define INSTR_OPCODE_WIDTH  7
 `define INSTR_OFFSET        20
 `define INSTR_WIDTH         32 
+
+`define INSTR_OPCODE_RANGE `INSTR_OPCODE_WIDTH-1:0
+
+//////////////////////
+// Decode defines
+///////////////////////
+
+`define INSTR_OPCODE_ADDR_RANGE 31:25
+`define INSTR_DST_ADDR_RANGE    24:20
+`define INSTR_SRC1_ADDR_RANGE   19:15
+`define INSTR_SRC2_ADDR_RANGE   14:10
+
+`define INSTR_M_OFFSET_WIDTH 15
+`define INSTR_M_OFFSET_RANGE `INSTR_M_OFFSET_WIDTH-1:0
+
+`define INSTR_B_OFFSET_WIDTH 20
+`define INSTR_B_OFFSET_RANGE `INSTR_B_OFFSET_WIDTH-1:0
+
+`define ALU_OFFSET_WIDTH    `MAX(`INSTR_M_OFFSET_WIDTH, \
+                                 `INSTR_B_OFFSET_WIDTH)
+
+`define ALU_OFFSET_RANGE    `ALU_OFFSET_WIDTH-1:0
+
+`define ALU_MUL_LATENCY         5
+`define ALU_MUL_LATENCY_WIDTH   $clog2(`ALU_MUL_LATENCY)
+`define ALU_MUL_LATENCY_RANGE   `ALU_MUL_LATENCY_WIDTH-1:0
+
+///////////////////////
+// OPCODES
+///////////////////////
+`define INSTR_R_TYPE            `INSTR_OPCODE_WIDTH'h0X
+`define INSTR_M_TYPE            `INSTR_OPCODE_WIDTH'h1X
+
+`define INSTR_ADD_OPCODE        `INSTR_OPCODE_WIDTH'h00
+`define INSTR_SUB_OPCODE        `INSTR_OPCODE_WIDTH'h01
+`define INSTR_MUL_OPCODE        `INSTR_OPCODE_WIDTH'h02
+
+`define INSTR_LDB_OPCODE        `INSTR_OPCODE_WIDTH'h10
+`define INSTR_LDW_OPCODE        `INSTR_OPCODE_WIDTH'h11
+`define INSTR_STB_OPCODE        `INSTR_OPCODE_WIDTH'h12
+`define INSTR_STW_OPCODE        `INSTR_OPCODE_WIDTH'h13
+`define INSTR_MOV_OPCODE        `INSTR_OPCODE_WIDTH'h14
+
+`define INSTR_BEQ_OPCODE        `INSTR_OPCODE_WIDTH'h30
+`define INSTR_JUMP_OPCODE       `INSTR_OPCODE_WIDTH'h31
+
+`define INSTR_TLBWRITE_OPCODE   `INSTR_OPCODE_WIDTH'h32
+`define INSTR_IRET_OPCODE       `INSTR_OPCODE_WIDTH'h33
 
 ///////////////////////
 // Instruction cache defines
@@ -51,6 +101,7 @@
 `define ICACHE_BLOCK_SIZE       (`ICACHE_LINE_WIDTH/8)
 `define ICACHE_BLOCK_ADDR_SIZE  $clog2(`ICACHE_BLOCK_SIZE)
 `define ICACHE_INSTR_IN_LINE    5:2
+`define ICACHE_INSTR_IN_LINE_WIDTH 4
 
 `define ICACHE_TAG_WIDTH        (`ICACHE_ADDR_WIDTH - `ICACHE_NUM_SET_WIDTH - `ICACHE_BLOCK_ADDR_SIZE)
 `define ICACHE_TAG_RANGE        `ICACHE_TAG_WIDTH - 1:0
@@ -60,14 +111,6 @@
 `define ICACHE_TAG_ADDR_RANGE  (`ICACHE_ADDR_WIDTH - 1):(`ICACHE_NUM_SET_WIDTH + `ICACHE_BLOCK_ADDR_SIZE)
 `define ICACHE_SET_ADDR_RANGE  (`ICACHE_BLOCK_ADDR_SIZE+`ICACHE_NUM_SET_WIDTH):`ICACHE_BLOCK_ADDR_SIZE
 
-
-///////////////////////
-// Decoder defines
-///////////////////////
-`define DEC_RB_OFF_WIDTH    `MAX(`REG_FILE_RANGE, `INSTR_OFFSET)
-`define DEC_FUNC3_WIDTH     3
-`define DEC_FUNC7_WIDTH     7
-`define DEC_NOP_INSTR       `INSTR_WIDTH
 
 ///////////////////////
 // Data cache defines
