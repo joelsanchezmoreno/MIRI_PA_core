@@ -7,6 +7,9 @@ module fetch_top
     input   logic                               reset,
 
     input   logic   [`PC_WIDTH-1:0]             boot_addr,
+    
+    // Exception
+    output  fetch_xcpt_t                        xcpt_fetch,
 
     // Branches 
     input   logic                               take_branch,
@@ -18,6 +21,7 @@ module fetch_top
     // Fetched instruction
     output  logic   [`INSTR_WIDTH-1:0]          decode_instr_data,
     output  logic                               decode_instr_valid,
+    output  logic   [`PC_WIDTH_RANGE]           decode_instr_pc, 
     
     // Request to the memory hierarchy
     output  logic                               req_valid_miss,
@@ -27,6 +31,7 @@ module fetch_top
     input   logic [`ICACHE_LINE_WIDTH-1:0]      rsp_data_miss,
     input   logic                               rsp_valid_miss
  );
+assign xcpt_fetch = '0; //FIXME: connect to iTLB
 
 logic   [`PC_WIDTH-1:0] program_counter;
 logic   [`PC_WIDTH-1:0] program_counter_next;
@@ -39,6 +44,7 @@ assign program_counter_update   = ( stall_fetch | !icache_ready) ? 1'b0 : 1'b1;
 assign program_counter_next     = ( take_branch ) ? branch_pc : 
                                                     program_counter + 4;
 
+
 // Request to the Instruction Cache
 logic icache_req_valid;
 logic icache_ready;
@@ -46,14 +52,21 @@ logic icache_ready;
 assign icache_req_valid = !stall_fetch & icache_ready;
 
 // Response from the Instruction Cache
-logic                               icache_rsp_valid;
-logic   [`ICACHE_LINE_WIDTH-1:0]    icache_rsp_data;
+logic                                   icache_rsp_valid;
+logic [`ICACHE_LINE_WIDTH-1:0]          icache_rsp_data;
+logic [`ICACHE_INSTR_IN_LINE_WIDTH-1:0] word_in_line;
+logic [`INSTR_WIDTH-1:0]                decode_instr_data_next;
+
+//     CLK    EN            DOUT                DIN                   
+`EN_FF(clock, !stall_fetch, decode_instr_data,  decode_instr_data_next)
+`EN_FF(clock, !stall_fetch, decode_instr_valid, icache_rsp_valid)
+
+assign decode_instr_pc = program_counter;
 
 always_comb
 begin
-    decode_instr_valid  = icache_rsp_valid;
-    word_in_line        = program_counter[`ICACHE_INSTR_IN_LINE];
-    decode_instr_data   = icache_rsp_data[`INSTR_WIDTH*word_in_line+:`INSTR_WIDTH];
+    word_in_line            = program_counter[`ICACHE_INSTR_IN_LINE];
+    decode_instr_data_next  = icache_rsp_data[`INSTR_WIDTH*word_in_line+:`INSTR_WIDTH];
 end
 
 // Request to the memory hierarchy
