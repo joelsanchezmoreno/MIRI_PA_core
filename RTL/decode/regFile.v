@@ -1,51 +1,55 @@
-module regFile (
-  input logic clock,
-  input logic reset, 
-  input logic writeEn,
+module regFile 
+(
+    // System signals
+    input   logic                          clock,
+    input   logic                          reset, 
 
-  input logic [`REG_FILE_ADDR_RANGE] src1, 
-  input logic [`REG_FILE_ADDR_RANGE] src2, 
-  input logic [`REG_FILE_ADDR_RANGE] dest,
+    // Read port
+    input   logic [`REG_FILE_ADDR_RANGE]   src1_addr, 
+    input   logic [`REG_FILE_ADDR_RANGE]   src2_addr,
+    output  logic [`REG_FILE_DATA_RANGE]   reg1_data, 
+    output  logic [`REG_FILE_DATA_RANGE]   reg2_data,
 
-  input  logic [`REG_FILE_RANGE] writeVal,
-  output logic [`REG_FILE_RANGE] reg1, 
-  output logic [`REG_FILE_RANGE] reg2,
+    // Write port
+    input   logic                          writeEn,
+    input   logic [`REG_FILE_ADDR_RANGE]   dest_addr,
+    input   logic [`REG_FILE_DATA_RANGE]   writeVal,
 
-  input logic excV,
-  input logic [`PC_WIDTH-1:0] rmPC,
-  input logic [`REG_FILE_ADDR_RANGE] rmAddr
-
+    // Exception input
+    input   logic                          xcpt_valid,
+    input   logic [`PC_WIDTH-1:0]          rmPC,
+    input   logic [`REG_FILE_ADDR_RANGE]   rmAddr
 );
 
-  logic [`REG_FILE_RANGE] regMem [`REG_FILE_ADDR_RANGE];
-  logic [`REG_FILE_RANGE] rm0;
-  logic [`REG_FILE_RANGE] rm1;
+// FF to store the registers data
+logic [`REG_FILE_DATA_RANGE] regMem,regMem_ff [`REG_FILE_ADDR_RANGE];
+logic [`REG_FILE_DATA_RANGE] rm0, rm0_ff;
+logic [`REG_FILE_DATA_RANGE] rm1, rm1_ff;
 
+//      CLK    RST      DOUT     DIN     DEF
+`RST_FF(clock, reset, regMem_ff, regMem, '0)
+`RST_FF(clock, reset, rm0_ff, rm0, '0)
+`RST_FF(clock, reset, rm1_ff, rm1, '0)
 
-  logic [`REG_FILE_RANGE] regMem_ff [`REG_FILE_ADDR_RANGE];
-  logic [`REG_FILE_RANGE] rm0_ff;
-  logic [`REG_FILE_RANGE] rm1_ff;
+integer i;
 
-  //      CLK    RST      DOUT     DIN     DEF
-  `RST_FF(clock, reset, regMem_ff, regMem, '0)
-  `RST_FF(clock, reset, rm0_ff, rm0, '0)
-  `RST_FF(clock, reset, rm1_ff, rm1, '0)
+always_comb
+begin
+    rm0     = rm0_ff;
+    rm1     = rm1_ff;
+    regMem  = regMem_ff;
 
+    if (writeEn) 
+        regMem[dest_addr] = writeVal;
 
-  integer i;
-  always_comb
-  begin
-	rm0 = rm0_ff;
-	rm1 = rm1_ff;
-	regMem = regMem_ff;
-	if (writeEn) regMem[dest] = writeVal;	
-	if (excV)
-	begin	
+    if (xcpt_valid)
+    begin	
           rm0 = rmPC;
           rm1 = rmAddr;
- 	end
-  	reg1 = (regMem_ff[src1]);
-	reg2 = (regMem_ff[src2]);
-  end
+    end
+    
+    reg1_data = (regMem_ff[src1_addr]);
+    reg2_data = (regMem_ff[src2_addr]);
+end
 
 endmodule 
