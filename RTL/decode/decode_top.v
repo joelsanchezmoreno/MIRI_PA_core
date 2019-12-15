@@ -3,113 +3,201 @@
 module decode_top
 (
     // System signals
-    input   logic                               clock,
-    input   logic                               reset_c,
+    input   logic                           clock,
+    input   logic                           reset,
 
     // Stall pipeline
-    input   logic                               stall_decode,
+    input   logic                           stall_decode,
+
+    // Exceptions. WB takes care of managing exceptions and priorities
+    input   fetch_xcpt_t                    xcpt_fetch_in,
+    output  fetch_xcpt_t                    xcpt_fetch_out,
+    output  decode_xcpt_t                   decode_xcpt_next,
 
     // Fetched instruction
-    input   logic                               fetch_instr_valid,
-    input   logic   [`INSTR_WIDTH-1:0]          fetch_instr_data,
+    input   logic                           fetch_instr_valid,
+    input   logic   [`INSTR_WIDTH-1:0]      fetch_instr_data,
+    input   logic   [`PC_WIDTH_RANGE]       fetch_instr_pc, 
 
     // Instruction to ALU
-    output  logic                               dec_instr_valid,
-    output  dec_instruction_info                dec_instr_info,
+    output  logic                           req_to_alu_valid,
+    output  alu_request_t                   req_to_alu_info,
+    output  logic   [`PC_WIDTH_RANGE]       req_to_alu_pc,
 
-    input logic [`REG_FILE_RANGE] 		writeValRF,
-    input logic 				writeEnRF,
+    // Write requests to the Register File
+    input logic [`REG_FILE_DATA_RANGE] 		writeValRF,
+    input logic 				            writeEnRF,
     input logic [`REG_FILE_ADDR_RANGE] 		destRF,
 
-    input logic 				excV,
-    input logic [`PC_WIDTH-1:0] 		rmPC,
+    // Exceptions values to be stored on the RF
+    input logic 				            xcpt_valid,
+    input logic [`PC_WIDTH_RANGE] 		    rmPC,
     input logic [`REG_FILE_ADDR_RANGE] 		rmAddr,
 
     // Bypasses
-    input logic [`REG_FILE_RANGE]		aluOutBP,
-    input logic [`REG_FILE_RANGE]		memOutBP,
-
+    input logic [`REG_FILE_DATA_RANGE]		alu_data_bypass,
+    input logic [`REG_FILE_DATA_RANGE]      cache_data_bypass
 );
 
-logic   dec_instr_update;
-dec_instruction_info        dec_instr_info_next;
+/////////////////////////////////////////
+// Control logic for signals to be sent to ALU
+logic           req_to_alu_valid_next;
+alu_request_t   req_to_alu_info_next;
 
-logic [`REG_FILE_ADDR_RANGE] rd_alu;
-logic [`REG_FILE_ADDR_RANGE] rd_alu_2;
-logic [`REG_FILE_ADDR_RANGE] rd_alu_3;
+decode_xcpt_t decode_xcpt_next;
 
-//NEED TO CHECK IF THIS SOLUTION IS FEASIBLE - THE 3RD BP WILL AFFECT ONLY
-//WITH LOADS WHERE WE NEED TO BRING THE VALUE TO ALU FROM MEM
-//AN ALTERNATIVE TO THIS IMPLEMENTATION IS TO BYPASS THE RD ASWELL FROM THE
-//OTHER STAGES, MAYBE THIS ONE WONT WORK (2 AND 3 RD)
-`FF(clock, reset_c, rd_alu_3, rd_alu_2) //3rd Bypass from ALU with dist=3
-`FF(clock, reset_c, rd_alu_2, rd_alu) //2nd Bypass from ALU with dist=2
-`FF(clock, reset_c, rd_alu, fetch_instr_data[24:20])
+assign req_to_alu_valid_next = ( !stall_decode & fetch_instr_valid) ? 1'b1 : 1'b0;
 
-logic [`REG_FILE_RANGE] regA, regB; 
+//  CLK    DOUT             DIN
+`FF(clock, req_to_alu_info, req_to_alu_info_next)
+`FF(clock, req_to_alu_pc,   fetch_instr_pc)
 
-//     CLK    RST      DOUT            DIN
-`EN_FF(clock, reset_c, dec_instr_info, dec_instr_info_next)
+//      CLK    RST    DOUT                DIN                      DEF
+`RST_FF(clock, reset, req_to_alu_valid, req_to_alu_valid_next, '0)
+`RST_FF(clock, reset, decode_xcpt,      decode_xcpt_next,      '0)
+`RST_FF(clock, reset, xcpt_fetch_out,   xcpt_fetch_in,         '0)
 
-//      CLK    RST      DOUT            DIN                  DEF
-`RST_FF(clock, reset_c, dec_instr_valid, dec_instr_update, 1'b0)
+/////////////////////////////////////////
+// Register file signals      
+logic [`REG_FILE_DATA_RANGE] rf_reg1_data, rf_reg2_data; 
 
-assign dec_instr_update = ( stall_decode || !fetch_instr_valid) ? 1'b0 : 1'b1;
-        dec_instr_info_next.rb_offset = `ZX(`DEC_RB_OFF_WIDTH,fetch_instr_data[14:0]);
+/////////////////////////////////////////
+// Destination register FF to know when to apply bypasses
 
-//TODO: Finish encoding and ask Roger the instructions really needed
+// Bypass from ALU
+logic [`REG_FILE_ADDR_RANGE] rd_alu_ff;
+logic [`INSTR_OPCODE_RANGE]  opcode_alu_ff; // We store the opcode to check if it was an R-type instr, so the result is computed on ALU stage
+
+//  CLK    DOUT           DIN
+`FF(clock, rd_alu_ff,     fetch_instr_data[`INSTR_DST_ADDR_RANGE]) 
+`FF(clock, opcode_alu_ff, fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]) 
+
+// Bypass from cache
+logic [`REG_FILE_ADDR_RANGE] rd_alu_ff_2;
+logic [`INSTR_OPCODE_RANGE]  opcode_alu_2_ff; // We store the opcode to check if it was an M-type instr, so the result is computed on cache stage
+
+//  CLK    DOUT             DIN
+`FF(clock, rd_alu_ff_2,     rd_alu_ff)    
+`FF(clock, opcode_alu_2_ff, opcode_alu_ff) 
+
+
 always_comb	
 begin
-    dec_instr_info_next = '0;
-    dec_instr_info_next.opcode    = fetch_instr_data[31:25];
-    dec_instr_info_next.rd        = fetch_instr_data[24:20];
-    dec_instr_info_next.ra        = (rd_alu   == fetch_instr_data[19:15]				       ) ? aluOutBP : //BP ALU -> DECODE DIST = 1 
-	   			    (rd_alu_2 == fetch_instr_data[19:15] || rd_alu_3 == fetch_instr_data[19:15]) ? memOutBP : //BP ALU -> DECODE DIST = 2/3
-				    					    					   regA; 
-//TODO: CHECK CORRECT ORDER, I THINK THIS IS THE CORRECT ORDER SINCE ALU VALUE IS THE MOST RECENT ONE
-    if ( dec_instr_info_next.opcode == 8'h0X) // R-format
-    begin
-        dec_instr_info_next.rb_offset = (rd_alu   == fetch_instr_data[14:10]					   )   ? `ZX(`DEC_RB_OFF_WIDTH, aluOutBP) :
-					(rd_alu_2 == fetch_instr_data[14:10] || rd_alu_2 == fetch_instr_data[14:10])   ? `ZX(`DEC_RB_OFF_WIDTH, memOutBP) :
-				   										         `ZX(`DEC_RB_OFF_WIDTH,regB);
-    end
-    else if ( dec_instr_info_next.opcode == 8'h1X ) // M-format
-    begin
-        dec_instr_info_next.rb_offset = `ZX(`DEC_RB_OFF_WIDTH,fetch_instr_data[14:0]);
-	if (dec_instr_info_next.opcode == 8'h13 || dec_instr_info_next.opcode == 8'h12)//if store, we take rd value or (BP)
-		dec_instr_info_next.rd        = (rd_alu   == fetch_instr_data[24:20]					   ) ? aluOutBP :
-		       				(rd_alu_2 == fetch_instr_data[24:20] || rd_alu_3 == fetch_instr_data[24:20]) ? memOutBP : 
-															       regB;
+    decode_xcpt_next.xcpt_illegal_instr = 1'b0;
+    decode_xcpt_next.xcpt_pc = fetch_instr_pc;
 
-    end
-    else if ( dec_instr_info_next.opcode == 8'h3X ) // B-format
+    // Opcode and destination register are always decoded from the instruction
+    // provided by the fetch stage
+    req_to_alu_info_next.opcode  = fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE];
+    req_to_alu_info_next.rd_addr = fetch_instr_data[`INSTR_DST_ADDR_RANGE];
+    req_to_alu_info_next.ra_addr = fetch_instr_data[`INSTR_SRC1_ADDR_RANGE];
+
+    // Register A value depends on the instructions being performed at the
+    // alu and cache stage at this cycle, because we may need to bypass data
+    req_to_alu_info_next.ra_data = (  opcode_alu_ff == `INSTR_R_TYPE   
+                                    & rd_alu_ff   == fetch_instr_data[`INSTR_SRC1_ADDR_RANGE] ) ? alu_data_bypass   : // Bypass from ALU  
+
+                                   (  ( opcode_alu_2_ff == `INSTR_LDB_OPCODE | opcode_alu_2_ff == `INSTR_LDW_OPCODE)
+                                    & rd_alu_ff_2 == fetch_instr_data[`INSTR_SRC1_ADDR_RANGE]  
+                                    & dcache_rsp_valid)                                         ? cache_data_bypass : //Bypass from Cache (hit on LD req)
+
+				    					    					                                 rf_reg1_data; // data from register file
+
+    // Use RD to store src2
+    req_to_alu_info_next.rb_data = (opcode_alu_ff == `INSTR_R_TYPE & rd_alu_ff == fetch_instr_data[`INSTR_SRC2_ADDR_RANGE]) ? alu_data_bypass : // Bypass from ALU
+                                   ((  opcode_alu_2_ff == `INSTR_LDB_OPCODE | opcode_alu_2_ff == `INSTR_LDW_OPCODE )
+                                     & rd_alu_ff_2 == fetch_instr_data[`INSTR_SRC2_ADDR_RANGE] & dcache_rsp_valid)          ? cache_data_bypass : //Bypass from Cache (hit on LD req)
+				   										                                                                 rf_reg2_data; // data from register file
+
+    ////////////////////////////////////////////////
+    // Decode instruction to determine RB or offset 
+    
+    if ( fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_M_TYPE )  
     begin
-	    if (dec_instr_info_next.opcode == 8'h30) // BEQ CASE
-	        dec_instr_info_next.rb_offset = `ZX(`DEC_RB_OFF_WIDTH, {fetch_instr_data[24:20], fetch_instr_data[9:0]}); 
-	    else if (dec_instr_info_next.opcode == 8'h31) // JUMP CASE
-	        dec_instr_info_next.rb_offset = `ZX(`DEC_RB_OFF_WIDTH, {fetch_instr_data[24:20], fetch_instr_data[14:0]}); 
+        req_to_alu_info_next.offset = `ZX(`ALU_OFFSET_WIDTH,fetch_instr_data[14:0]);
+
+        // If it is a store request we have to take into account that RD value
+        // could have been computed on ALU stage or brought from memory on cache
+        // stage
+	    if (fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_STB_OPCODE | 
+            fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_STW_OPCODE  )//if store, we take rd value or (BP)
+        begin
+		    req_to_alu_info_next.rd_addr =  (  opcode_alu_ff == `INSTR_R_TYPE  
+                                             & rd_alu_ff     == fetch_instr_data[`INSTR_DST_ADDR_RANGE] ) ? `ZX(`REG_FILE_ADDR_WIDTH,alu_data_bypass) : // Bypass from ALU
+
+		       				                (  (  opcode_alu_2_ff == `INSTR_LDB_OPCODE 
+                                                | opcode_alu_2_ff == `INSTR_LDW_OPCODE )
+                                             & rd_alu_ff_2 == fetch_instr_data[`INSTR_DST_ADDR_RANGE]) ? `ZX(`REG_FILE_ADDR_WIDTH,cache_data_bypass) : //Bypass from Cache (hit on LD req)
+										                                                                 `ZX(`REG_FILE_ADDR_WIDTH,rf_reg2_data); // data from register file
+        end
+    end
+    else 
+    begin
+        //FIXME: [Optional] Need to add MOV, TLBWRITE and IRET decoding
+        // B-format
+        if (  fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]  == `INSTR_BEQ_OPCODE 
+            | fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]  == `INSTR_JUMP_OPCODE)  
+        begin
+	    
+            if ( fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_BEQ_OPCODE) // BEQ CASE
+            begin
+	            req_to_alu_info_next.offset = `ZX(`ALU_OFFSET_WIDTH, {fetch_instr_data[`INSTR_OFFSET_HI_ADDR_RANGE], 
+                                                                      fetch_instr_data[`INSTR_OFFSET_LO_ADDR_RANGE]}); 
+            end
+            else // JUMP CASE
+            begin
+    	        req_to_alu_info_next.offset = `ZX(`ALU_OFFSET_WIDTH, {fetch_instr_data[`INSTR_OFFSET_HI_ADDR_RANGE], 
+                                                                      fetch_instr_data[`INSTR_OFFSET_M_ADDR_RANGE], 
+                                                                      fetch_instr_data[`INSTR_OFFSET_LO_ADDR_RANGE]}); 
+            end
+        end
+        else
+        begin
+            // Raise an exception because the instruction is not supported
+            decode_xcpt_next.xcpt_illegal_instr = (fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_R_TYPE)? 1'b1 : 1'b0;
+        end
     end
 end
+
+
+////////////////////////////////
+// Register File
+
+logic [`REG_FILE_ADDR_RANGE]   src1_addr; 
+logic [`REG_FILE_ADDR_RANGE]   src2_addr;
+logic [`REG_FILE_ADDR_RANGE]   dest_addr;
+
+assign src1_addr = fetch_instr_data[`INSTR_SRC1_ADDR_RANGE];
+
+assign src2_addr = (  fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_STB_OPCODE  
+                    | fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_STW_OPCODE) ? fetch_instr_data[`INSTR_DST_ADDR_RANGE]:
+                                                                                         fetch_instr_data[`INSTR_SRC2_ADDR_RANGE];
+
+assign dest_addr = fetch_instr_data[`INSTR_DST_ADDR_RANGE];
 
 regFile 
 registerFile
 (
-  .clock     (clock),
-  .reset     (reset),
-  .writeEn   (writeEnRF),
+    // System signals
+    .clock      ( clock         ),
+    .reset      ( reset         ),
 
-  .src1      (fetch_instr_data[19:15]),
-  .src2      ((dec_instr_info_next.opcode == 8'h13 || dec_instr_info_next.opcode == 8'h12)?fetch_instr_data[24:20]:fetch_instr_data[14:10]),
-  .dest	     (fetch_instr_data[24:20]),
+    // Read port
+    .src1_addr  ( src1_addr     ),
+    .src2_addr  ( src2_addr     ),
+    .reg1_data  ( rf_reg1_data  ),
+    .reg2_data  ( rf_reg2_data  ),
 
-  .writeVal  (writeValRF),
-  .reg1	     (regA),
-  .reg2      (regB),
+    // Write port
+    .writeEn    ( writeEnRF     ),
+    .dest_addr  ( dest_addr     ),
+    .writeVal   ( writeValRF    ),
 
-  .excV	     (excV),
-  .rmPC	     (rmPC),
-  .rmAddr    (rmAddr)
-
+    // Exception input
+    .xcpt_valid ( xcpt_valid    ),
+    .rmPC	    ( rmPC          ),
+    .rmAddr     ( rmAddr        )
 );
+
 endmodule
 
