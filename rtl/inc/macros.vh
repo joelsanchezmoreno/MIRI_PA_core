@@ -1,6 +1,15 @@
 // Some usefule macros
-`ifndef _ET_MACROS_
-`define _ET_MACROS_
+`ifndef _MACROS_
+`define _MACROS_
+
+    `define BYTE_SIZE        1 //bytes
+    `define DWORD_SIZE       4 // bytes
+
+    `define BYTE_BITS        (8*`BYTE_SIZE)
+    `define DWORD_BITS       (8*`DWORD_SIZE)
+
+
+    `define MAX(a,b) ((a)>(b) ? (a) : (b) )
 
     // Extensions
     `define ZX(SIZE, SIGNAL) \
@@ -28,4 +37,11 @@
             if(RST)     DATAOUT <= DEF; \
             else if(EN) DATAOUT <= DATAIN;
 
-`endif // _ET_MACROS_
+     `define ZX_BYTE(SIZE, SIGNAL) \
+        (((SIZE-`BYTE_BITS) == 0) ? SIGNAL : { {(SIZE-`BYTE_BITS){1'b0}}, SIGNAL })
+
+     `define ZX_DWORD(SIZE, SIGNAL) \
+        (((SIZE-`DWORD_BITS) == 0) ? SIGNAL : { {(SIZE-`DWORD_BITS){1'b0}}, SIGNAL })
+
+
+`endif // _MACROS_

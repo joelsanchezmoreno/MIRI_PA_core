@@ -10,7 +10,7 @@ module core_top
     input   logic   [`PC_WIDTH-1:0]                 boot_addr,
 
     // Exception address
-    input   logic   [`PC_WIDTH-1:0]                 xcpt_addr
+    input   logic   [`PC_WIDTH-1:0]                 xcpt_addr,
     
     // Request from D$ to the memory hierarchy
     output  logic                                   dcache_req_valid_miss,
@@ -94,6 +94,7 @@ logic [`PC_WIDTH_RANGE]             dcache_to_wb_pc;
 
 // Bypass value
 logic [`REG_FILE_DATA_RANGE]        dcache_data_bypass ;
+logic                               dcache_data_bp_valid;
 
 // Request to RF sent to WB
 logic                               dcache_write_rf;
@@ -103,13 +104,13 @@ logic [`DCACHE_MAX_ACC_SIZE-1:0]    dcache_rsp_data;
 /////////////////////////////////////////
 // WriteBack signals to other stages
 
-logic [`REG_FILE_DATA_RANGE]    wb_writeValRF;
-logic 				            wb_writeEnRF;
-logic [`REG_FILE_ADDR_RANGE] 	wb_destRF;
+logic [`REG_FILE_DATA_RANGE]        wb_writeValRF;
+logic 				                wb_writeEnRF;
+logic [`REG_FILE_ADDR_RANGE]    	wb_destRF;
 
-logic                           wb_xcpt_valid;
-logic [`PC_WIDTH_RANGE] 		wb_rmPC;
-logic [`REG_FILE_ADDR_RANGE] 	wb_rmAddr;
+logic                               wb_xcpt_valid;
+logic [`PC_WIDTH_RANGE] 		    wb_rmPC;
+logic [`REG_FILE_XCPT_ADDR_RANGE] 	wb_rmAddr;
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -174,7 +175,7 @@ decode_top
     // Exceptions
     .xcpt_fetch_in      ( xcpt_fetch_to_decode  ),
     .xcpt_fetch_out     ( xcpt_fetch_to_alu     ),
-    .decode_xcpt_next   ( xcpt_decode_to_alu    ),
+    .decode_xcpt        ( xcpt_decode_to_alu    ),
     
     // Fetched instruction
     .fetch_instr_valid  ( fetch_instr_valid     ),
@@ -198,7 +199,8 @@ decode_top
 
     // Bypasses
     .alu_data_bypass    ( alu_data_bypass       ),
-    .cache_data_bypass  ( dcache_data_bypass    )
+    .cache_data_bypass  ( dcache_data_bypass    ),
+    .cache_data_valid   ( dcache_data_bp_valid  )
 );
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -230,7 +232,7 @@ alu_top
     .req_alu_pc         ( req_to_alu_pc             ),
 
     // Request to dcache stage 
-    .req_dcache_pc      ( req_to_dcache_pc          )
+    .req_dcache_pc      ( req_to_dcache_pc          ),
     .req_dcache_info    ( req_to_dcache_info        ),
     .req_dcache_valid   ( req_to_dcache_valid       ),
     
@@ -286,6 +288,7 @@ cache_top
 
     // Bypasses to previous stages
     .data_bypass    ( dcache_data_bypass    ),
+    .data_bp_valid  ( dcache_data_bp_valid  ),
     
     // Request to WB stage
     .write_rf       ( dcache_write_rf       ), 
