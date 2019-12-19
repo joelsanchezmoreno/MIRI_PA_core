@@ -1,3 +1,5 @@
+`include "soc.vh"
+
 module regFile 
 (
     // System signals
@@ -5,33 +7,34 @@ module regFile
     input   logic                          reset, 
 
     // Read port
-    input   logic [`REG_FILE_ADDR_RANGE]   src1_addr, 
-    input   logic [`REG_FILE_ADDR_RANGE]   src2_addr,
-    output  logic [`REG_FILE_DATA_RANGE]   reg1_data, 
-    output  logic [`REG_FILE_DATA_RANGE]   reg2_data,
+    input   logic [`REG_FILE_ADDR_RANGE]        src1_addr, 
+    input   logic [`REG_FILE_ADDR_RANGE]        src2_addr,
+    output  logic [`REG_FILE_DATA_RANGE]        reg1_data, 
+    output  logic [`REG_FILE_DATA_RANGE]        reg2_data,
 
     // Write port
-    input   logic                          writeEn,
-    input   logic [`REG_FILE_ADDR_RANGE]   dest_addr,
-    input   logic [`REG_FILE_DATA_RANGE]   writeVal,
+    input   logic                               writeEn,
+    input   logic [`REG_FILE_ADDR_RANGE]        dest_addr,
+    input   logic [`REG_FILE_DATA_RANGE]        writeVal,
 
     // Exception input
-    input   logic                          xcpt_valid,
-    input   logic [`PC_WIDTH-1:0]          rmPC,
-    input   logic [`REG_FILE_ADDR_RANGE]   rmAddr
+    input   logic                               xcpt_valid,
+    input   logic [`PC_WIDTH-1:0]               rmPC,
+    input   logic [`REG_FILE_XCPT_ADDR_RANGE]   rmAddr
 );
 
 // FF to store the registers data
-logic [`REG_FILE_DATA_RANGE] regMem,regMem_ff [`REG_FILE_ADDR_RANGE];
-logic [`REG_FILE_DATA_RANGE] rm0, rm0_ff;
-logic [`REG_FILE_DATA_RANGE] rm1, rm1_ff;
+logic [`REG_FILE_DATA_RANGE][`REG_FILE_NUM_REGS_RANGE]regMem     ;
+logic [`REG_FILE_DATA_RANGE][`REG_FILE_NUM_REGS_RANGE]regMem_ff  ;
+logic [`REG_FILE_DATA_RANGE] rm0;
+logic [`REG_FILE_DATA_RANGE] rm0_ff;
+logic [`REG_FILE_DATA_RANGE] rm1;
+logic [`REG_FILE_DATA_RANGE] rm1_ff;
 
 //      CLK    RST      DOUT     DIN     DEF
 `RST_FF(clock, reset, regMem_ff, regMem, '0)
 `RST_FF(clock, reset, rm0_ff, rm0, '0)
 `RST_FF(clock, reset, rm1_ff, rm1, '0)
-
-integer i;
 
 always_comb
 begin
