@@ -24,7 +24,7 @@ module wb_top
     // Exceptions values to be stored on the RF
     output  logic 				                xcpt_valid,
     output  logic [`PC_WIDTH_RANGE] 		    rmPC,
-    output  logic [`REG_FILE_ADDR_RANGE] 		rmAddr
+    output  logic [`REG_FILE_XCPT_ADDR_RANGE] 	rmAddr
 );
 
 
