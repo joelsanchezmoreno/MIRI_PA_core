@@ -12,7 +12,7 @@ module decode_top
     // Exceptions. WB takes care of managing exceptions and priorities
     input   fetch_xcpt_t                    xcpt_fetch_in,
     output  fetch_xcpt_t                    xcpt_fetch_out,
-    output  decode_xcpt_t                   decode_xcpt_next,
+    output  decode_xcpt_t                   decode_xcpt,
 
     // Fetched instruction
     input   logic                           fetch_instr_valid,
@@ -32,11 +32,12 @@ module decode_top
     // Exceptions values to be stored on the RF
     input logic 				            xcpt_valid,
     input logic [`PC_WIDTH_RANGE] 		    rmPC,
-    input logic [`REG_FILE_ADDR_RANGE] 		rmAddr,
+    input logic [`REG_FILE_XCPT_ADDR_RANGE] rmAddr,
 
     // Bypasses
     input logic [`REG_FILE_DATA_RANGE]		alu_data_bypass,
-    input logic [`REG_FILE_DATA_RANGE]      cache_data_bypass
+    input logic [`REG_FILE_DATA_RANGE]      cache_data_bypass,
+    input logic                             cache_data_valid
 );
 
 /////////////////////////////////////////
@@ -59,7 +60,8 @@ assign req_to_alu_valid_next = ( !stall_decode & fetch_instr_valid) ? 1'b1 : 1'b
 
 /////////////////////////////////////////
 // Register file signals      
-logic [`REG_FILE_DATA_RANGE] rf_reg1_data, rf_reg2_data; 
+logic [`REG_FILE_DATA_RANGE] rf_reg1_data; 
+logic [`REG_FILE_DATA_RANGE] rf_reg2_data; 
 
 /////////////////////////////////////////
 // Destination register FF to know when to apply bypasses
@@ -80,7 +82,6 @@ logic [`INSTR_OPCODE_RANGE]  opcode_alu_2_ff; // We store the opcode to check if
 `FF(clock, rd_alu_ff_2,     rd_alu_ff)    
 `FF(clock, opcode_alu_2_ff, opcode_alu_ff) 
 
-
 always_comb	
 begin
     decode_xcpt_next.xcpt_illegal_instr = 1'b0;
@@ -99,23 +100,24 @@ begin
 
                                    (  ( opcode_alu_2_ff == `INSTR_LDB_OPCODE | opcode_alu_2_ff == `INSTR_LDW_OPCODE)
                                     & rd_alu_ff_2 == fetch_instr_data[`INSTR_SRC1_ADDR_RANGE]  
-                                    & dcache_rsp_valid)                                         ? cache_data_bypass : //Bypass from Cache (hit on LD req)
+                                    & cache_data_valid)                                         ? cache_data_bypass : //Bypass from Cache (hit on LD req)
 
 				    					    					                                 rf_reg1_data; // data from register file
 
     // Use RD to store src2
     req_to_alu_info_next.rb_data = (opcode_alu_ff == `INSTR_R_TYPE & rd_alu_ff == fetch_instr_data[`INSTR_SRC2_ADDR_RANGE]) ? alu_data_bypass : // Bypass from ALU
                                    ((  opcode_alu_2_ff == `INSTR_LDB_OPCODE | opcode_alu_2_ff == `INSTR_LDW_OPCODE )
-                                     & rd_alu_ff_2 == fetch_instr_data[`INSTR_SRC2_ADDR_RANGE] & dcache_rsp_valid)          ? cache_data_bypass : //Bypass from Cache (hit on LD req)
-				   										                                                                 rf_reg2_data; // data from register file
+                                     & rd_alu_ff_2 == fetch_instr_data[`INSTR_SRC2_ADDR_RANGE] & cache_data_valid)          ? cache_data_bypass : //Bypass from Cache (hit on LD req)
+				   										                                                                      rf_reg2_data; // data from register file
+
+    // Encoding for ADDI and M-type instructions                                                                                                                     
+    req_to_alu_info_next.offset = `ZX(`ALU_OFFSET_WIDTH,fetch_instr_data[14:0]);
 
     ////////////////////////////////////////////////
     // Decode instruction to determine RB or offset 
     
     if ( fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_M_TYPE )  
     begin
-        req_to_alu_info_next.offset = `ZX(`ALU_OFFSET_WIDTH,fetch_instr_data[14:0]);
-
         // If it is a store request we have to take into account that RD value
         // could have been computed on ALU stage or brought from memory on cache
         // stage
@@ -123,12 +125,12 @@ begin
             fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_STW_OPCODE  )//if store, we take rd value or (BP)
         begin
 		    req_to_alu_info_next.rd_addr =  (  opcode_alu_ff == `INSTR_R_TYPE  
-                                             & rd_alu_ff     == fetch_instr_data[`INSTR_DST_ADDR_RANGE] ) ? `ZX(`REG_FILE_ADDR_WIDTH,alu_data_bypass) : // Bypass from ALU
+                                             & rd_alu_ff     == fetch_instr_data[`INSTR_DST_ADDR_RANGE] ) ? alu_data_bypass[`REG_FILE_ADDR_RANGE] : // Bypass from ALU
 
 		       				                (  (  opcode_alu_2_ff == `INSTR_LDB_OPCODE 
                                                 | opcode_alu_2_ff == `INSTR_LDW_OPCODE )
-                                             & rd_alu_ff_2 == fetch_instr_data[`INSTR_DST_ADDR_RANGE]) ? `ZX(`REG_FILE_ADDR_WIDTH,cache_data_bypass) : //Bypass from Cache (hit on LD req)
-										                                                                 `ZX(`REG_FILE_ADDR_WIDTH,rf_reg2_data); // data from register file
+                                             & rd_alu_ff_2 == fetch_instr_data[`INSTR_DST_ADDR_RANGE]) ? cache_data_bypass[`REG_FILE_ADDR_RANGE] : //Bypass from Cache (hit on LD req)
+										                                                                 rf_reg2_data[`REG_FILE_ADDR_RANGE]; // data from register file
         end
     end
     else 
@@ -153,8 +155,10 @@ begin
         end
         else
         begin
-            // Raise an exception because the instruction is not supported
-            decode_xcpt_next.xcpt_illegal_instr = (fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_R_TYPE)? 1'b1 : 1'b0;
+            if (  fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_R_TYPE 
+                & fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]  != `INSTR_NOP_OPCODE)
+                // Raise an exception because the instruction is not supported
+                decode_xcpt_next.xcpt_illegal_instr = 1'b1;
         end
     end
 end
@@ -173,7 +177,7 @@ assign src2_addr = (  fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_STB_O
                     | fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_STW_OPCODE) ? fetch_instr_data[`INSTR_DST_ADDR_RANGE]:
                                                                                          fetch_instr_data[`INSTR_SRC2_ADDR_RANGE];
 
-assign dest_addr = fetch_instr_data[`INSTR_DST_ADDR_RANGE];
+assign dest_addr = destRF;
 
 regFile 
 registerFile
@@ -198,6 +202,22 @@ registerFile
     .rmPC	    ( rmPC          ),
     .rmAddr     ( rmAddr        )
 );
+
+`ifdef VERBOSE_DECODE
+always_ff @(posedge clock)
+begin
+    if (req_to_alu_valid)
+    begin
+        $display("[DECODE] Request to ALU. PC = %h",req_to_alu_pc);
+        $display("         opcode  =  %h",req_to_alu_info.opcode);
+        $display("         rd addr =  %h",req_to_alu_info.rd_addr);
+        $display("         ra addr =  %h",req_to_alu_info.ra_addr);
+        $display("         ra data =  %h",req_to_alu_info.ra_data);
+        $display("         rb data =  %h",req_to_alu_info.rb_data);
+        $display("         offset  =  %h",req_to_alu_info.offset );
+    end
+end
+`endif
 
 endmodule
 

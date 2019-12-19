@@ -1,5 +1,4 @@
 `include "soc.vh"
-
 module alu_top
 (
     // System signals
@@ -18,7 +17,7 @@ module alu_top
     
     // Request from decode stage
     input   alu_request_t                   req_alu_info,  
-    output  logic [`PC_WIDTH-1:0]           req_alu_pc,
+    input   logic [`PC_WIDTH-1:0]           req_alu_pc,
    
     // Request to dcache stage 
     output  logic [`PC_WIDTH-1:0]           req_dcache_pc,
@@ -52,7 +51,7 @@ module alu_top
 `FF(clock, req_dcache_pc,req_alu_pc)
 
 
-logic   dcache_request_t req_dcache_info_next;
+dcache_request_t req_dcache_info_next;
 logic  req_mem_instr_next;
 logic  req_int_instr_next;
 
@@ -74,7 +73,11 @@ assign  req_int_instr_next = (req_alu_info.opcode == `INSTR_R_TYPE) ? 1'b1 : // 
 ////////////////////////////////////
 // ALU is busy when we perform MUL operation
 logic   alu_busy_next;
-logic [`REG_FILE_DATA_RANGE] alu_mul_data, alu_mul_data_ff;
+logic [`REG_FILE_DATA_RANGE] alu_mul_data;
+logic [`REG_FILE_DATA_RANGE] alu_mul_data_ff;
+
+//      CLK   RST    DOUT      DIN           DEF
+`RST_FF(clock,reset, alu_busy, alu_busy_next,1'b0)
 
 //     CLK   EN                         DOUT             DIN
 `EN_FF(clock,!alu_busy & alu_busy_next, alu_mul_data_ff, alu_mul_data)
@@ -128,17 +131,24 @@ begin
         begin
             alu_mul_data = req_alu_info.ra_data * req_alu_info.rb_data;
         end
+        //ADDI
+        else if (req_alu_info.opcode == `INSTR_ADDI_OPCODE)
+        begin
+            alu_mul_data = req_alu_info.ra_data * req_alu_info.offset;
+        end
+
         // MEM
 	    else if (req_alu_info.opcode == `INSTR_M_TYPE) 
         begin
-            req_dcache_info_next.addr   = (  (req_opcode  == `INSTR_LDB_OPCODE | req_opcode == `INSTR_LDW_OPCODE)
-                                           & (req_dst_reg == req_alu_info.rd_addr) ? cache_data_bypass : // Bypass Cache to Cache_next
-                                                                                     req_alu_info.ra_data + req_alu_info.offset;
+            req_dcache_info_next.addr   = (  (  req_alu_info.opcode == `INSTR_LDB_OPCODE 
+                                              | req_alu_info.opcode == `INSTR_LDW_OPCODE)
+                                           & (req_dst_reg == req_alu_info.rd_addr))? cache_data_bypass : // Bypass Cache to Cache_next
+                                                                                     req_alu_info.ra_data + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset);
 
             // Used only on store requests
-	    	req_dcache_info_next.data   = (  (req_opcode  == `INSTR_LDB_OPCODE | req_opcode == `INSTR_LDW_OPCODE)
-                                           & (req_dst_reg == req_alu_info.ra_addr) ? cache_data_bypass : // Bypass Cache to Cache_next
-                                                                                     req_alu_info.ra_data + req_alu_info.offset;
+	    	req_dcache_info_next.data   = (  (req_alu_info.opcode == `INSTR_LDB_OPCODE | req_alu_info.opcode == `INSTR_LDW_OPCODE)
+                                           & (req_dst_reg == req_alu_info.ra_addr))? cache_data_bypass : // Bypass Cache to Cache_next
+                                                                                     req_alu_info.ra_data + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset);
             
             // Specify LD or ST for dcache request
             if (req_alu_info.opcode == `INSTR_LDB_OPCODE | req_alu_info.opcode == `INSTR_LDW_OPCODE)
@@ -147,7 +157,7 @@ begin
                 req_dcache_info_next.is_store = 1'b1;
 
             // Specify size for dcache request
-            if (req_alu_info.opcode == `INSTR_LDB_OPCODE | req_alu_info.opcode == `INSTR_STBW_OPCODE)
+            if (req_alu_info.opcode == `INSTR_LDB_OPCODE | req_alu_info.opcode == `INSTR_STB_OPCODE)
                 req_dcache_info_next.size = Byte;
             else
                 req_dcache_info_next.size = Word;
@@ -157,14 +167,14 @@ begin
 	    begin
             if (req_alu_info.ra_data == req_alu_info.rb_data)
             begin
-                branch_pc_next   = req_alu_info.offset;
+                branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
 	    	    take_branch_next = 1'b1;
             end
 	    end
         // JUMP
         else if (req_alu_info.opcode == `INSTR_JUMP_OPCODE) 
 	    begin
-	    	branch_pc_next   = req_alu_info.offset;
+	    	branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
 	    	take_branch_next = 1'b1;
 	    end
 
@@ -189,7 +199,8 @@ begin
 end
 
 // Perform MUL
-logic [`ALU_MUL_LATENCY_RANGE] mul_count_next, mul_count;
+logic [`ALU_MUL_LATENCY_RANGE] mul_count_next;
+logic [`ALU_MUL_LATENCY_RANGE] mul_count;
 
 //      CLK    RST    DOUT       DIN             DEF
 `RST_FF(clock, reset, mul_count, mul_count_next, '0)
@@ -216,4 +227,26 @@ begin
     end
 end
 
+`ifdef VERBOSE_ALU
+always_ff @(posedge clock)
+begin
+    if (req_dcache_valid)
+    begin
+        $display("[ALU] Request to Cache. PC = %h",req_dcache_pc);
+        $display("      addr             =  %h",req_dcache_info.addr);      
+        $display("      size             =  %h",req_dcache_info.size) ;     
+        $display("      is_store         =  %h",req_dcache_info.is_store);
+        $display("      data             =  %h",req_dcache_info.data)  ;    
+        $display("      req_m_type_instr =  %h",req_m_type_instr);
+        $display("      req_r_type_instr =  %h",req_r_type_instr);
+        $display("      req_dst_reg      =  %h",req_dst_reg );
+    end
+
+    if (take_branch)
+    begin
+        $display("[ALU] Take branch. Current PC = %h",req_dcache_pc);
+        $display("      Jump to  =  %h",branch_pc); 
+    end
+end
+`endif
 endmodule

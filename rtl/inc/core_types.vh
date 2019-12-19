@@ -7,8 +7,15 @@
 typedef enum logic [1:0] {
    Byte            = 2'b00, // 8b
    HWord           = 2'b01, // 16b
-   Word            = 2'b10  // 32b
+   Word            = 2'b11  // 32b
 } req_size_t;
+
+typedef enum logic [1:0] {
+   idle            = 2'b00, 
+   evict_line      = 2'b01, 
+   bring_line      = 2'b10, 
+   write_cache_line= 2'b11
+} dcache_state_t;
 
 ////////////////////////////////////////////////////////////////////////////////
 // STRUCTS
@@ -22,7 +29,7 @@ typedef struct packed
     logic   [`REG_FILE_DATA_RANGE]  rb_data; // Source register B (rs2)
     logic   [`ALU_OFFSET_RANGE]     offset;  // Offset value
     logic   [`INSTR_OPCODE_RANGE]   opcode;  // Operation code
-} alu_request_t; ;
+} alu_request_t;
 
 typedef struct packed 
 {
