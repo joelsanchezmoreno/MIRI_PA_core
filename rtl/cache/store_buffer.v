@@ -22,7 +22,7 @@ module store_buffer
     input   logic [`DCACHE_ADDR_RANGE]  search_addr,
     output  logic                       search_rsp_hit_tag,
     output  logic                       search_rsp_hit_line,
-    output  logic                       search_rsp
+    output  store_buffer_t              search_rsp
  );
 
  ////////////////////////////////////////////////////////////////
@@ -51,8 +51,10 @@ endfunction
 
 //////////////////////////////////////////////////
 // Store Buffer signals 
-store_buffer_t  [`DCACHE_ST_BUFFER_ENTRIES_RANGE] store_buffer_info,store_buffer_info_ff;
-logic           [`DCACHE_ST_BUFFER_ENTRIES_RANGE] store_buffer_valid,store_buffer_valid_ff;
+store_buffer_t  [`DCACHE_ST_BUFFER_ENTRIES_RANGE] store_buffer_info;
+store_buffer_t  [`DCACHE_ST_BUFFER_ENTRIES_RANGE] store_buffer_info_ff;
+logic           [`DCACHE_ST_BUFFER_ENTRIES_RANGE] store_buffer_valid;
+logic           [`DCACHE_ST_BUFFER_ENTRIES_RANGE] store_buffer_valid_ff;
 
 //  CLK    DOUT                  DIN       
 `FF(clock, store_buffer_info_ff, store_buffer_info )
@@ -67,7 +69,8 @@ assign buffer_empty = |store_buffer_valid_ff;
 assign buffer_full  = (store_buffer_valid_ff == '1);
 assign oldest_info  = store_buffer_info_ff[oldest_id];
 
-logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] counter, counter_ff;
+logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0][`DCACHE_ST_BUFFER_ENTRIES_RANGE] counter     ;
+logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0][`DCACHE_ST_BUFFER_ENTRIES_RANGE] counter_ff  ;
 logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] max_count;
 logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] oldest_id;
 
@@ -80,7 +83,7 @@ logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] max_count_search;
 logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] search_oldest;
 
 //      CLK    RST    DOUT        DIN      DEF
-`RST_FF(clock, reset, counter_ff, counter, '0 )
+`RST_FF(clock, reset, counter_ff, counter, '1 )
 
 integer i,j,k;
 
@@ -122,8 +125,7 @@ begin
         for (j = 0; j < `DCACHE_ST_BUFFER_NUM_ENTRIES; j++)
         begin
             // we increase in one the the buffer position as they get older
-            if ( j != free_pos )
-                counter[j] = counter_ff[j] + 1'b1;
+            counter[j] = counter_ff[j] + 1'b1;
         end
 
         // We reset the counter for the new block

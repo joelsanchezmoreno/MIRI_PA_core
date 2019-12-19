@@ -1,6 +1,5 @@
 `include "soc.vh"
 
-// FIXME: ADD FLUSH STORE BUFFER IN CASE OF XCPT
 module cache_top
 (
     // System signals
@@ -29,7 +28,8 @@ module cache_top
     input   logic [`PC_WIDTH_RANGE]             req_instr_pc,
 
     // Bypasses to previous stages and signals to WB
-    input   logic [`REG_FILE_DATA_RANGE]        data_bypass,
+    output  logic [`REG_FILE_DATA_RANGE]        data_bypass,
+    output  logic                               data_bp_valid,
     
     // Request to WB stage
     output  logic                               write_rf,
@@ -46,8 +46,8 @@ module cache_top
     input   logic                               rsp_valid_miss
  );
 
-//  CLK    RST    DOUT                 DIN         
-`FF(clock, reset, wb_instr_pc,         req_instr_pc)
+//  CLK    DOUT         DIN         
+`FF(clock, wb_instr_pc, req_instr_pc)
 
 //////////////////////////////////////////////////
 // Exceptions
@@ -94,17 +94,19 @@ logic [`DCACHE_MAX_ACC_SIZE-1:0] rsp_data_next;
 
 // In case of LD request we will have to write that data on the RF.
 // In addition, we also check if the request is for an ALU R type 
-// instruction, which also writes on the RF. 
+// instruction, which also writes on the RF.
+logic dcache_rsp_valid;
 assign write_rf_next = !stall_pipeline & 
-                       ( (req_is_load & rsp_valid) |  // M-type instruction (LDB or LDW)
-                         (req_valid & !int_instr )) ; // R-type instruction
+                       ( ((req_is_load | !req_info.is_store) & dcache_rsp_valid) |  // M-type instruction (LDB or LDW)
+                          (req_valid & !int_instr )) ; // R-type instruction
 
-assign rsp_data_next = (req_is_load & rsp_valid) ? rsp_data_dcache :  // M-type instruction (LDB or LDW)
+assign rsp_data_next = (req_is_load & dcache_rsp_valid) ? rsp_data_dcache :  // M-type instruction (LDB or LDW)
                        req_info.data; // R-type instruction
 
 
 // Data bypass
-assign data_bypass = rsp_data_dcache;
+assign data_bypass   = rsp_data_dcache;
+assign data_bp_valid = ((req_is_load | !req_info.is_store) & dcache_rsp_valid);
 
 //////////////////////////////////////////////////
 // Data Cache instance
@@ -124,11 +126,11 @@ dcache
     .req_info           ( req_info          ),
 
     // Response to the core pipeline
-    .rsp_valid          ( rsp_valid         ),
+    .rsp_valid          ( dcache_rsp_valid  ),
     .rsp_data           ( rsp_data_next     ),
     
     // Request to the memory hierarchy
-    .req_addr_miss      ( req_addr_miss     ),
+    .req_info_miss      ( req_info_miss     ),
     .req_valid_miss     ( req_valid_miss    ),
                     
     // Response from the memory hierarchy
