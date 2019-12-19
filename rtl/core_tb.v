@@ -1,37 +1,40 @@
 `include "soc.vh"
 
-module core_tb();
+module core_tb(
+    input   logic   clk_i,
+    input   logic   reset_i
+);
 
-timeunit 1ns;
-timeprecision 100ps;
 
-// Generate clock and reset signals
-logic clock;
-logic reset;
-
-initial 
-begin 
-    clock = 1'b0;
-    reset = 1'b1;
-    #10 reset = 1'b0;
-end
-
-always #5 clock = ~clock;
-
-/* FIXME: Needed for dump?
 initial
 begin
-      $dumpfile("$REPOROOT/trace.vcd");
-      $dumpvars;
+    $display("[CORE TB] PA core tb init");
 end
-*/
+
+//////////////////////////////////////////////////
+//// Generate clock and reset signals
+
+//timeunit 1ns;
+//timeprecision 100ps;
+//logic clock;
+//logic reset;
+//
+//initial 
+//begin 
+//    clock = 1'b0;
+//    reset = 1'b1;
+//    #10 reset = 1'b0;
+//end
+//
+//always #5 clock = ~clock;
+
 
 //////////////////////////////////////////////////
 // Interface signals with main memory
 
 // Request from D$ to the memory hierarchy
 logic                                   dcache_req_valid_miss;
-memory_request_t                        dcache_req_info_miss,
+memory_request_t                        dcache_req_info_miss;
 
 // Request from I$ to the memory hierarchy
 logic                                   icache_req_valid_miss;
@@ -48,8 +51,8 @@ core_top
 core_top
 (
     // System signals
-    .clock                  ( clock                 ),
-    .reset                  ( reset                 ),
+    .clock                  ( clk_i                 ),
+    .reset                  ( reset_i               ),
 
     // Boot address
     .boot_addr              ( `CORE_BOOT_ADDRESS    ),
@@ -79,10 +82,11 @@ logic [`MAIN_MEMORY_LINE_RANGE] main_memory [`MAIN_MEMORY_DEPTH_RANGE];
 
 // Request from core arbiter to MM
 logic               req_mm_valid;
-memory_request_t    req_mm_info, req_mm_info_ff;
+memory_request_t    req_mm_info;
+memory_request_t    req_mm_info_ff;
 
 //  CLK    DOUT            DIN           
-`FF(clock, req_mm_info_ff, req_mm_info)
+`FF(clk_i, req_mm_info_ff, req_mm_info)
 
 // Response from MM to core arbiter
 logic rsp_mm_valid;
@@ -96,10 +100,11 @@ logic [`ICACHE_LINE_WIDTH-1:0]  rsp_mm_data;
 // request
 
 // Logic to emulate main memory latency
-logic [`LATENCY_MM_REQ_RANGE] mem_req_count, mem_req_count_ff ;
+logic [`LATENCY_MM_REQ_RANGE] mem_req_count;
+logic [`LATENCY_MM_REQ_RANGE] mem_req_count_ff ;
 
-//      CLK    RST    DOUT              DIN           DEF
-`RST_FF(clock, reset, mem_req_count_ff, mem_req_count, '0)
+//      CLK    RST      DOUT              DIN           DEF
+`RST_FF(clk_i, reset_i, mem_req_count_ff, mem_req_count, '0)
 
 // Request from D$ to the memory hierarchy
 logic               dcache_req_valid_next,dcache_req_valid_ff;
@@ -107,15 +112,15 @@ memory_request_t    dcache_req_info_ff;
 
 // Request from I$ to the memory hierarchy
 logic               icache_req_valid_next,icache_req_valid_ff;
-memory_request_t    icache_req_info_miss_ff;
+memory_request_t    icache_req_info_ff;
 
-//      CLK    RST    DOUT                 DIN           DEF
-`RST_FF(clock, reset, dcache_req_valid_ff, dcache_req_valid_next, '0)
-`RST_FF(clock, reset, icache_req_valid_ff, icache_req_valid_next, '0)
+//      CLK    RST      DOUT                 DIN           DEF
+`RST_FF(clk_i, reset_i, dcache_req_valid_ff, dcache_req_valid_next, '0)
+`RST_FF(clk_i, reset_i, icache_req_valid_ff, icache_req_valid_next, '0)
 
-//         CLK    RST    EN                     DOUT                DIN                   DEF
-`RST_EN_FF(clock, reset, dcache_req_valid_miss, dcache_req_info_ff, dcache_req_info_miss, '0)
-`RST_EN_FF(clock, reset, icache_req_valid_miss, icache_req_info_ff, icache_req_info_miss, '0)
+//         CLK    RST      EN                     DOUT                DIN                   DEF
+`RST_EN_FF(clk_i, reset_i, dcache_req_valid_miss, dcache_req_info_ff, dcache_req_info_miss, '0)
+`RST_EN_FF(clk_i, reset_i, icache_req_valid_miss, icache_req_info_ff, icache_req_info_miss, '0)
 
 logic   wait_rsp_icache_next,wait_rsp_icache_ff ;
 logic   wait_rsp_enable;
@@ -123,18 +128,18 @@ logic   wait_icache_rsp_update;
 
 assign wait_rsp_enable = (!dcache_req_valid_miss & icache_req_valid_miss) | wait_icache_rsp_update;
 
-//         CLK    RST    EN               DOUT                DIN                   DEF
-`RST_EN_FF(clock, reset, wait_rsp_enable, wait_rsp_icache_ff, wait_rsp_icache_next, '0)
+//         CLK    RST      EN               DOUT                DIN                   DEF
+`RST_EN_FF(clk_i, reset_i, wait_rsp_enable, wait_rsp_icache_ff, wait_rsp_icache_next, '0)
 
 always_comb
 begin
     rsp_valid_miss  = 1'b0;
-    wait_rsp_update = 1'b0;
 
     // Hold values for next cycle
     dcache_req_valid_next = dcache_req_valid_ff;
     icache_req_valid_next = icache_req_valid_ff;
     req_mm_info           = req_mm_info_ff;
+    mem_req_count         = mem_req_count_ff;
 
     // We store that we have a pending request from D$
     if (dcache_req_valid_miss)
@@ -152,16 +157,18 @@ begin
     // response for the I$ we perform the D$ request
     if (dcache_req_valid_ff & !wait_rsp_icache_ff)
     begin
-        if (mem_req_count < `LATENCY_MM_REQ-1) )
-        begin
+        if (mem_req_count_ff < `LATENCY_MM_REQ-1) 
             mem_req_count = mem_req_count_ff + 1'b1;
-            req_mm_valid = 1'b1;
-            req_mm_info  = dcache_req_info_ff;
-        end
         else
         begin
+            req_mm_valid = !rsp_mm_valid;
+            req_mm_info  = dcache_req_info_ff;
+
             if (rsp_mm_valid)
             begin
+                `ifdef VERBOSE_CORETB       
+                    $display("[CORE TB] Response arbiter. Data to D$ %h",rsp_mm_data);                               
+                `endif
                 // De-assert request to the MM
                 req_mm_valid    = 1'b0;
 
@@ -177,25 +184,25 @@ begin
                 dcache_req_valid_next   = 1'b0;
             end
         end
-        end
     end
 
     // If there is a request from the I$ and not from the D$ or we are 
     // already performing the I$ request we (continue) perform the I$ request
     if ((!dcache_req_valid_ff & icache_req_valid_ff) | wait_rsp_icache_ff)
     begin
-        wait_rsp_icache_next    = 1'b1;
+        wait_rsp_icache_next = 1'b1;
 
-        if (mem_req_count == `LATENCY_MM_REQ-1) )
-        begin
+        if (mem_req_count_ff < `LATENCY_MM_REQ-1) 
             mem_req_count = mem_req_count_ff + 1'b1;
-            req_mm_valid = 1'b1;
-            req_mm_info  = dcache_req_info_ff;
-        end
         else
         begin
+            req_mm_valid = !rsp_mm_valid;
+            req_mm_info  = icache_req_info_ff;    
             if (rsp_mm_valid)
-            begin            
+            begin     
+                `ifdef VERBOSE_CORETB       
+                    $display("[CORE TB] Response arbiter. Data to I$ %h",rsp_mm_data);   
+                `endif                    
                 // De-assert request to the MM
                 req_mm_valid    = 1'b0;
 
@@ -219,47 +226,88 @@ end
 //////////////////////////////////////////////////
 // Main memory
 
-integer i;
-
-initial 
-begin
-    // Open text file with memory content
-    data_file = $fopen("C:/outputs.txt", "r"); //Opening text file
-
-    $readmemh({"data_input_file",".hex"}, main_memory);
-end
-
 // Logic to emulate main memory latency
-logic [`LATENCY_MM_RSP_RANGE] mem_rsp_count, mem_rsp_count_ff ;
+logic [`LATENCY_MM_RSP_RANGE] mem_rsp_count;
 
-//      CLK    RST    DOUT              DIN           DEF
-`RST_FF(clock, reset, mem_rsp_count_ff, mem_rsp_count, '0)
-
-always_comb 
+integer i;
+always_ff @(posedge clk_i) 
 begin
-    mem_rsp_count = mem_rsp_count_ff;
-    rsp_mm_valid  = 1'b0;
+    rsp_mm_valid  <= 1'b0;
 
-    if (req_mm_valid)
+    if (reset_i)
+    begin 
+    	$readmemh("data_input_file.hex", main_memory);
+        $display("[CORE TB] Main memory loaded. @'h0 =  %h",main_memory[0]);          
+        $display("[CORE TB] Main memory loaded. @'h1 =  %h",main_memory[1]);          
+        $display("[CORE TB] Main memory loaded. @'h1024 = %h",main_memory[`CORE_BOOT_ADDRESS]);          
+    end
+    else if (req_mm_valid)
     begin
-        mem_rsp_count = mem_rsp_count_ff + 1'b1;
+        mem_rsp_count <= mem_rsp_count + 1'b1;
 
-        if (mem_req_count == `LATENCY_MM_RSP)
+        if (mem_rsp_count == `LATENCY_MM_RSP-1)
         begin
             // Send response to the core arbiter
-            rsp_mm_valid  = 1'b1;
+            rsp_mm_valid  <= 1'b1;
+
             // Load
             if (!req_mm_info_ff.is_store)
-                rsp_mm_data = main_memory[req_mm_info_ff.addr];
+            begin
+                `ifdef VERBOSE_CORETB       
+                    $display("[CORE TB] Main memory LD to address %h",req_mm_info_ff.addr );  
+                `endif             
+                rsp_mm_data <= main_memory[req_mm_info_ff.addr];
+            end
             //Store
             else
-                main_memory[req_mm_info_ff.addr] = req_mm_info_ff.data;
-           
+            begin
+                //main_memory[req_mm_info_ff.addr] <= req_mm_info_ff.data;
+                for (i = 0; i < `MAIN_MEMORY_LINE_SIZE; i++) 
+        	        main_memory[req_mm_info_ff.addr + i] <= req_mm_info_ff.data[i*`BYTE_BITS+:`BYTE_BITS];
+            end
             // Reset counter
-            mem_req_count = '0; 
+            mem_rsp_count <= '0; 
         end
     end
 end
+
+
+//logic [`LATENCY_MM_RSP_RANGE] mem_rsp_count_ff ;
+
+////      CLK    RST      DOUT              DIN           DEF
+//`RST_FF(clk_i, reset_i, mem_rsp_count_ff, mem_rsp_count, '0)
+//
+//always_comb 
+//begin
+//    mem_rsp_count = mem_rsp_count_ff;
+//    rsp_mm_valid  = 1'b0;
+//    main_memory   = main_memory_ff;
+//
+//    if (req_mm_valid)
+//    begin
+//        mem_rsp_count = mem_rsp_count_ff + 1'b1;
+//
+//        if (mem_rsp_count == `LATENCY_MM_RSP)
+//        begin
+//            // Send response to the core arbiter
+//            rsp_mm_valid  = 1'b1;
+//            // Load
+//            if (!req_mm_info_ff.is_store)
+//            begin
+//                `ifdef VERBOSE_CORETB       
+//                    $display("[CORE TB] Main memory LD to address %h",req_mm_info_ff.addr );  
+//                `endif             
+//                rsp_mm_data = main_memory_ff[req_mm_info_ff.addr];
+//            end
+//            //Store
+//            else
+//                main_memory[req_mm_info_ff.addr] = req_mm_info_ff.data;
+//           
+//            // Reset counter
+//            mem_rsp_count = '0; 
+//        end
+//    end
+//end
 
 endmodule
 
