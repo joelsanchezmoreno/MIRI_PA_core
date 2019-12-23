@@ -166,9 +166,6 @@ begin
 
             if (rsp_mm_valid)
             begin
-                `ifdef VERBOSE_CORETB       
-                    $display("[CORE TB] Response arbiter. Data to D$ %h",rsp_mm_data);                               
-                `endif
                 // De-assert request to the MM
                 req_mm_valid    = 1'b0;
 
@@ -200,9 +197,6 @@ begin
             req_mm_info  = icache_req_info_ff;    
             if (rsp_mm_valid)
             begin     
-                `ifdef VERBOSE_CORETB       
-                    $display("[CORE TB] Response arbiter. Data to I$ %h",rsp_mm_data);   
-                `endif                    
                 // De-assert request to the MM
                 req_mm_valid    = 1'b0;
 
@@ -229,17 +223,21 @@ end
 // Logic to emulate main memory latency
 logic [`LATENCY_MM_RSP_RANGE] mem_rsp_count;
 
-integer i;
 always_ff @(posedge clk_i) 
 begin
     rsp_mm_valid  <= 1'b0;
 
     if (reset_i)
     begin 
-    	$readmemh("data_input_file.hex", main_memory);
-        $display("[CORE TB] Main memory loaded. @'h0 =  %h",main_memory[0]);          
-        $display("[CORE TB] Main memory loaded. @'h1 =  %h",main_memory[1]);          
-        $display("[CORE TB] Main memory loaded. @'h1024 = %h",main_memory[`CORE_BOOT_ADDRESS]);          
+    	$readmemh("data_input_file.hex", main_memory, `MM_BOOT_ADDR);
+        $display("[CORE TB] Main memory loaded. PC@'h0 =  %h",main_memory[0]);          
+        $display("[CORE TB] Main memory loaded. PC@'h1 =  %h",main_memory[1]);          
+        $display("[CORE TB] Main memory loaded. PC@'h1000 = %h",main_memory['h1000 >> `ICACHE_RSH_VAL]);          
+        $display("[CORE TB] Main memory loaded. PC@'h1010 = %h",main_memory['h1010 >> `ICACHE_RSH_VAL]);          
+        $display("[CORE TB] Main memory loaded. PC@'h1020 = %h",main_memory['h1020 >> `ICACHE_RSH_VAL]);          
+        $display("[CORE TB] Main memory loaded. PC@'h1030 = %h",main_memory['h1030 >> `ICACHE_RSH_VAL]);          
+        $display("------------------------------------------");          
+        $display("------------------------------------------");          
     end
     else if (req_mm_valid)
     begin
@@ -261,9 +259,7 @@ begin
             //Store
             else
             begin
-                //main_memory[req_mm_info_ff.addr] <= req_mm_info_ff.data;
-                for (i = 0; i < `MAIN_MEMORY_LINE_SIZE; i++) 
-        	        main_memory[req_mm_info_ff.addr + i] <= req_mm_info_ff.data[i*`BYTE_BITS+:`BYTE_BITS];
+        	    main_memory[req_mm_info_ff.addr] <= req_mm_info_ff.data;
             end
             // Reset counter
             mem_rsp_count <= '0; 
@@ -271,43 +267,33 @@ begin
     end
 end
 
+always_ff @(posedge clk_i) 
+begin
+    // If there is a request from the D$ and we are not busy sending the
+    // response for the I$ we perform the D$ request
+    if (dcache_req_valid_ff & !wait_rsp_icache_ff)
+    begin
+        if ( mem_req_count_ff >= `LATENCY_MM_REQ-1 &
+             rsp_mm_valid)
+        begin
+            `ifdef VERBOSE_CORETB       
+                $display("[CORE TB] Response arbiter. Data to D$ %h",rsp_mm_data);                               
+            `endif
+        end
+    end
 
-//logic [`LATENCY_MM_RSP_RANGE] mem_rsp_count_ff ;
-
-////      CLK    RST      DOUT              DIN           DEF
-//`RST_FF(clk_i, reset_i, mem_rsp_count_ff, mem_rsp_count, '0)
-//
-//always_comb 
-//begin
-//    mem_rsp_count = mem_rsp_count_ff;
-//    rsp_mm_valid  = 1'b0;
-//    main_memory   = main_memory_ff;
-//
-//    if (req_mm_valid)
-//    begin
-//        mem_rsp_count = mem_rsp_count_ff + 1'b1;
-//
-//        if (mem_rsp_count == `LATENCY_MM_RSP)
-//        begin
-//            // Send response to the core arbiter
-//            rsp_mm_valid  = 1'b1;
-//            // Load
-//            if (!req_mm_info_ff.is_store)
-//            begin
-//                `ifdef VERBOSE_CORETB       
-//                    $display("[CORE TB] Main memory LD to address %h",req_mm_info_ff.addr );  
-//                `endif             
-//                rsp_mm_data = main_memory_ff[req_mm_info_ff.addr];
-//            end
-//            //Store
-//            else
-//                main_memory[req_mm_info_ff.addr] = req_mm_info_ff.data;
-//           
-//            // Reset counter
-//            mem_rsp_count = '0; 
-//        end
-//    end
-//end
+    // If there is a request from the I$ and not from the D$ or we are 
+    // already performing the I$ request we (continue) perform the I$ request
+    if ((!dcache_req_valid_ff & icache_req_valid_ff) | wait_rsp_icache_ff)
+    begin
+        if ( mem_req_count_ff >= `LATENCY_MM_REQ-1 & rsp_mm_valid)
+        begin     
+            `ifdef VERBOSE_CORETB       
+                $display("[CORE TB] Response arbiter. Data to I$ %h",rsp_mm_data);   
+            `endif                    
+        end
+    end
+end
 
 endmodule
 
