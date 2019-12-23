@@ -46,8 +46,8 @@ module cache_top
     input   logic                               rsp_valid_miss
  );
 
-//  CLK    DOUT         DIN         
-`FF(clock, wb_instr_pc, req_instr_pc)
+//     CLK   EN            DOUT         DIN         
+`EN_FF(clock,dcache_ready, wb_instr_pc, req_instr_pc)
 
 //////////////////////////////////////////////////
 // Exceptions
@@ -87,26 +87,28 @@ logic [`DCACHE_MAX_ACC_SIZE-1:0] rsp_data_next;
 `RST_FF(clock, reset, write_rf, write_rf_next, '0)
 
 
-//         CLK    RST    EN         DOUT         DIN                 DEF
-`RST_EN_FF(clock, reset, req_valid, req_is_load, !req_info.is_store, '0)
-`RST_EN_FF(clock, reset, req_valid, dest_rf    , load_dst_reg      , '0)
+//         CLK    RST    EN                                    DOUT         DIN                 DEF
+`RST_EN_FF(clock, reset, req_valid & mem_instr & dcache_ready, req_is_load, !req_info.is_store, '0)
+`RST_EN_FF(clock, reset, req_valid & dcache_ready            , dest_rf    , load_dst_reg      , '0)
 
 
 // In case of LD request we will have to write that data on the RF.
 // In addition, we also check if the request is for an ALU R type 
 // instruction, which also writes on the RF.
 logic dcache_rsp_valid;
-assign write_rf_next = !stall_pipeline & 
-                       ( ((req_is_load | !req_info.is_store) & dcache_rsp_valid) |  // M-type instruction (LDB or LDW)
-                          (req_valid & !int_instr )) ; // R-type instruction
+assign write_rf_next = !stall_pipeline &
+                       ( ((req_is_load | !req_info.is_store) & dcache_rsp_valid) |  // M-type instruction this cycle or the last one with a hit
+                          (req_valid & int_instr )) ; // R-type instruction this cycle
 
 assign rsp_data_next = (req_is_load & dcache_rsp_valid) ? rsp_data_dcache :  // M-type instruction (LDB or LDW)
                        req_info.data; // R-type instruction
 
 
 // Data bypass
-assign data_bypass   = rsp_data_dcache;
-assign data_bp_valid = ((req_is_load | !req_info.is_store) & dcache_rsp_valid);
+assign data_bp_valid = (int_instr) ? req_valid : ((req_is_load | !req_info.is_store) & dcache_rsp_valid);
+
+assign data_bypass   = ((req_is_load | !req_info.is_store) & dcache_rsp_valid) ? rsp_data_dcache : 
+                                                                                 req_info.data;
 
 //////////////////////////////////////////////////
 // Data Cache instance
@@ -127,7 +129,7 @@ dcache
 
     // Response to the core pipeline
     .rsp_valid          ( dcache_rsp_valid  ),
-    .rsp_data           ( rsp_data_next     ),
+    .rsp_data           ( rsp_data_dcache   ),
     
     // Request to the memory hierarchy
     .req_info_miss      ( req_info_miss     ),
@@ -137,7 +139,22 @@ dcache
     .rsp_data_miss      ( rsp_data_miss     ),
     .rsp_valid_miss     ( rsp_valid_miss    )
 );
-
+`ifdef VERBOSE_DECODE
+always_ff @(posedge clock)
+begin
+    if (write_rf)
+    begin
+        $display("[CACHE]  Request to WB for RF. PC = %h",wb_instr_pc);
+        $display("         dest_rf =  %h",dest_rf);
+        $display("         rsp_data =  %h",rsp_data);
+    end
+    if (data_bp_valid)
+    begin
+        $display("[CACHE]  Request to WB for RF. PC = %h",wb_instr_pc);
+        $display("         data_bypass =  %h",data_bypass);
+    end
+end
+`endif
 /*
 //FIXME: Create module
 data_tlb
