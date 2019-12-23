@@ -15,6 +15,7 @@ module wb_top
     input   logic                               cache_req_write_rf,
     input   logic [`REG_FILE_ADDR_RANGE]        cache_req_dest_rf,
     input   logic [`DCACHE_MAX_ACC_SIZE-1:0]    cache_req_rsp_data,
+    input   logic [`PC_WIDTH-1:0]               cache_req_pc,
 
     // Request to RF
     output  logic [`REG_FILE_DATA_RANGE] 		req_to_RF_data,
