@@ -51,6 +51,9 @@ logic   [`PC_WIDTH_RANGE]       req_to_alu_pc;
 fetch_xcpt_t                    xcpt_fetch_to_alu;
 decode_xcpt_t                   xcpt_decode_to_alu;
 
+// Stall
+logic   decode_hazard;
+
 /////////////////////////////////////////
 // ALU signals to other stages
 
@@ -135,7 +138,8 @@ fetch_top
     .branch_pc          ( branch_pc             ), 
 
     // Stop fetching instructions
-    .stall_fetch        ( alu_busy | 
+    .stall_fetch        ( decode_hazard |
+                          alu_busy      |  
                           !dcache_ready         ),
 
     // Fetched instruction
@@ -169,8 +173,10 @@ decode_top
 
     // Stall pipeline
     .stall_decode       ( alu_busy   | 
-                          take_branch | 
-                          !dcache_ready         ) , 
+                          take_branch |            //FIXME: Take branch should introduce a NOP not stall decode
+                          !dcache_ready         ),
+
+    .decode_hazard      ( decode_hazard         ),                          
 
     // Exceptions
     .xcpt_fetch_in      ( xcpt_fetch_to_decode  ),
@@ -217,8 +223,7 @@ alu_top
     .reset              ( reset                     ),
 
     // Stall pipeline
-    .stall_alu          ( !req_to_alu_valid | 
-                          !dcache_ready             ),
+    .stall_alu          ( !dcache_ready             ),
     .alu_busy           ( alu_busy                  ),
 
     // Exceptions
@@ -228,6 +233,7 @@ alu_top
     .xcpt_decode_out    ( xcpt_decode_to_cache      ),
 
     // Request from decode stage
+    .req_alu_valid      ( req_to_alu_valid          ),
     .req_alu_info       ( req_to_alu_info           ),
     .req_alu_pc         ( req_to_alu_pc             ),
 
@@ -249,7 +255,8 @@ alu_top
  
     //Bypass
     .alu_data_bypass    ( alu_data_bypass           ),
-    .cache_data_bypass  ( dcache_data_bypass        )
+    .cache_data_bypass  ( dcache_data_bypass        ),
+    .cache_data_bp_valid( dcache_data_bp_valid      )
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -327,6 +334,7 @@ wb_top
     .cache_req_write_rf     ( dcache_write_rf       ),
     .cache_req_dest_rf      ( dcache_dest_rf        ),
     .cache_req_rsp_data     ( dcache_rsp_data       ),
+    .cache_req_pc           ( dcache_to_wb_pc       ),
 
     // Request to RF
     .req_to_RF_data         ( wb_writeValRF         ),

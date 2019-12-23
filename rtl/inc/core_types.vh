@@ -1,5 +1,53 @@
 `ifndef _CORE_TYPES_
 `define _CORE_TYPES_
+
+////////////////////////////////////////////////////////////////
+// FUNCTIONS
+////////////////////////////////////////////////////////////////
+
+function automatic is_r_type_instr;
+    input logic [`INSTR_OPCODE_RANGE] opcode;
+    begin
+        is_r_type_instr = 1'b0;
+        if ( (opcode == `INSTR_ADD_OPCODE)
+            |(opcode == `INSTR_SUB_OPCODE)
+            |(opcode == `INSTR_MUL_OPCODE)
+            |(opcode == `INSTR_ADDI_OPCODE))
+                is_r_type_instr = 1'b1;
+    end
+endfunction
+
+function automatic is_m_type_instr;
+    input logic [`INSTR_OPCODE_RANGE] opcode;
+    begin
+        is_m_type_instr = 1'b0;
+        if ( (opcode == `INSTR_LDB_OPCODE)
+            |(opcode == `INSTR_LDW_OPCODE)
+            |(opcode == `INSTR_STB_OPCODE)
+            |(opcode == `INSTR_STW_OPCODE))
+                is_m_type_instr = 1'b1;
+    end
+endfunction
+
+function automatic is_load_instr;
+    input logic [`INSTR_OPCODE_RANGE] opcode;
+    begin
+        is_load_instr = 1'b0;
+        if ( (opcode == `INSTR_LDB_OPCODE)
+            |(opcode == `INSTR_LDW_OPCODE))
+                is_load_instr = 1'b1;
+    end
+endfunction
+
+function automatic is_store_instr;
+    input logic [`INSTR_OPCODE_RANGE] opcode;
+    begin
+        is_store_instr = 1'b0;
+        if ( (opcode == `INSTR_STB_OPCODE)
+            |(opcode == `INSTR_STW_OPCODE))
+                is_store_instr = 1'b1;
+    end
+endfunction
 ////////////////////////////////////////////////////////////////////////////////
 // ENUMS
 ////////////////////////////////////////////////////////////////////////////////
