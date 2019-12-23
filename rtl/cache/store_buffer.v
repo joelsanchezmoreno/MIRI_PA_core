@@ -64,16 +64,14 @@ logic           [`DCACHE_ST_BUFFER_ENTRIES_RANGE] store_buffer_valid_ff;
 
 //////////////////////////////////////////////////
 // Logic to control the oldest position and update the buffer if needed
+logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] oldest_id;
+logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0][`DCACHE_ST_BUFFER_ENTRIES_RANGE] counter     ;
+logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0][`DCACHE_ST_BUFFER_ENTRIES_RANGE] counter_ff  ;
+logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] max_count;
 
 assign buffer_empty = |store_buffer_valid_ff;
 assign buffer_full  = (store_buffer_valid_ff == '1);
 assign oldest_info  = store_buffer_info_ff[oldest_id];
-
-logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0][`DCACHE_ST_BUFFER_ENTRIES_RANGE] counter     ;
-logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0][`DCACHE_ST_BUFFER_ENTRIES_RANGE] counter_ff  ;
-logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] max_count;
-logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] oldest_id;
-
 
 // Since we have a circular buffer we need always to return the oldest store
 // that hits on the store_buffer. Otherwise, if there are multiple stores for
