@@ -64,10 +64,12 @@ logic           [`DCACHE_ST_BUFFER_ENTRIES_RANGE] store_buffer_valid_ff;
 
 //////////////////////////////////////////////////
 // Logic to control the oldest position and update the buffer if needed
+localparam TREE_SIZE = 2*(`DCACHE_ST_BUFFER_NUM_ENTRIES)-1;
 logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] oldest_id;
-logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0][`DCACHE_ST_BUFFER_ENTRIES_RANGE] counter     ;
-logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0][`DCACHE_ST_BUFFER_ENTRIES_RANGE] counter_ff  ;
-logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] max_count;
+logic [TREE_SIZE-1:0][`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] oldest_id_tree;
+logic [TREE_SIZE-1:0][`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] maxcount_tree;
+logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] counter [`DCACHE_ST_BUFFER_NUM_ENTRIES-1:0];
+logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] counter_ff [`DCACHE_ST_BUFFER_NUM_ENTRIES-1:0];
 
 assign buffer_empty = |store_buffer_valid_ff;
 assign buffer_full  = (store_buffer_valid_ff == '1);
@@ -80,10 +82,34 @@ assign oldest_info  = store_buffer_info_ff[oldest_id];
 logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] max_count_search;
 logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] search_oldest;
 
-//      CLK    RST    DOUT        DIN      DEF
-`RST_FF(clock, reset, counter_ff, counter, '1 )
 
-integer i,j,k;
+genvar NODE_ID;
+generate for (NODE_ID = 0; NODE_ID < (TREE_SIZE); ++NODE_ID) begin : TREE_GEN 
+	localparam left_child = 2*NODE_ID + 1;
+	localparam right_child = 2*NODE_ID + 2;
+	if (NODE_ID >= (TREE_SIZE-`DCACHE_ST_BUFFER_NUM_ENTRIES)) begin
+		//Leaf nodes, read from counter	
+		assign maxcount_tree[NODE_ID] = counter_ff[NODE_ID-(`DCACHE_ST_BUFFER_NUM_ENTRIES-1)];
+		assign oldest_id_tree[NODE_ID] = NODE_ID-(`DCACHE_ST_BUFFER_NUM_ENTRIES-1);
+	end
+	else begin
+		assign maxcount_tree[NODE_ID]   = (maxcount_tree[left_child] <= maxcount_tree[right_child]) ? maxcount_tree[left_child]  : maxcount_tree[right_child]; 
+		assign oldest_id_tree[NODE_ID]  = (maxcount_tree[left_child] <= maxcount_tree[right_child]) ? oldest_id_tree[left_child] : oldest_id_tree[right_child]; 
+	end
+
+end
+endgenerate
+
+assign oldest_id = oldest_id_tree[0];
+
+
+generate for(genvar i = 0; i < `DCACHE_ST_BUFFER_NUM_ENTRIES; ++i) begin
+    //      CLK    RST    DOUT           DIN         DEF
+    `RST_FF(clock, reset, counter_ff[i], counter[i], '1 )
+end
+endgenerate
+
+integer j,k;
 
 logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] free_pos;
 
@@ -96,20 +122,12 @@ begin
     search_rsp_hit_tag  = 1'b0;
     search_rsp_hit_line = 1'b0;
 
+    free_pos = '0;
+    counter  = counter_ff;
+
     // Return victim ID
     if (get_oldest)
     begin
-        max_count = '0;
-        for (i = 0; i < `DCACHE_ST_BUFFER_NUM_ENTRIES; i++)
-        begin
-            // we look for the oldest way on the set
-            if ( store_buffer_valid_ff[i]  &
-                 max_count <= counter_ff[i]  )
-            begin
-                max_count   = counter_ff[i];
-                oldest_id   = i;
-            end
-        end
         store_buffer_valid[oldest_id] = 1'b0;
     end
 
@@ -132,17 +150,20 @@ begin
     end // if (push_valid)
 
     // Search for a tag
+    max_count_search = '0;
     if (search_valid)
     begin
         for (k = 0; k < `DCACHE_ST_BUFFER_NUM_ENTRIES; k++)
         begin
-            max_count_search = '0;
             // We check if there is a request on the buffer for the requested
             // TAG
             if ( search_addr[`DCACHE_TAG_ADDR_RANGE] == store_buffer_info_ff[k].addr[`DCACHE_TAG_ADDR_RANGE]
                  & store_buffer_valid_ff[k]  )
             begin
                 search_rsp_hit_tag  = 1'b1;
+                `ifdef VERBOSE_STORE_BUFFER
+                    $display("[STORE BUFFER] search_rsp_hit_tag has been asserted");
+                `endif
                 // We always return the oldest one if there are multiple hits
                 if ( max_count_search <= counter_ff[k])
                 begin
@@ -156,6 +177,9 @@ begin
             if ( search_addr[`DCACHE_SET_ADDR_RANGE] == store_buffer_info_ff[k].addr[`DCACHE_SET_ADDR_RANGE]
                  & store_buffer_valid_ff[k]  )
             begin
+                `ifdef VERBOSE_STORE_BUFFER
+                    $display("[STORE BUFFER] search_rsp_hit_line has been asserted");
+                `endif
                 search_rsp_hit_line = 1'b1;
                 // We always return the oldest one if there are multiple hits.
                 // In addition, we return the request that affects the line if
