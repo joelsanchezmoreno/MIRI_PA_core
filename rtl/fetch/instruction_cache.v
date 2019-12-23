@@ -65,13 +65,14 @@ logic [`ICACHE_WAYS_PER_SET_RANGE]  miss_icache_way_ff;
 
 //////////////////////////////////////////////////
 // Ready signal to stall the pipeline if ICache is busy
-logic icache_ready_next;
+logic icache_ready_next, icache_ready_ff;
+assign icache_ready = icache_ready_next;
 
 //      CLK    DOUT          DIN               
 //`FF(clock, icache_ready, icache_ready_next)
 
 //      CLK    RST    DOUT            DIN              DEF
-`RST_FF(clock, reset, icache_ready, icache_ready_next, 1'b1)
+`RST_FF(clock, reset, icache_ready_ff, icache_ready_next, 1'b1)
 
 logic pendent_req,pendent_req_ff;
 
@@ -86,7 +87,7 @@ begin
     instMem_valid       = instMem_valid_ff;
     instMem_tag         = instMem_tag_ff;
     instMem_data        = instMem_data_ff;
-    icache_ready_next   = icache_ready;
+    icache_ready_next   = icache_ready_ff;
     pendent_req         = pendent_req_ff;
 
     // There is a miss if the tag is not stored
@@ -135,7 +136,7 @@ begin
                 $display("[ICACHE] TAG miss asserted. Requested addr is %h",req_addr);
             `endif  
             pendent_req                     = 1'b1;
-            req_info_miss.addr              = req_addr;
+            req_info_miss.addr              = req_addr >> `ICACHE_RSH_VAL;
             req_info_miss.is_store          = 1'b0;
             req_valid_miss                  = !reset;
             icache_ready_next               = 1'b0;
@@ -188,7 +189,7 @@ icache_lru
     .reset              ( reset             ),
 
     // Info to select the victim
-    .victim_req         ( tag_miss          ),
+    .victim_req         ( !icache_hit       ),
     .victim_set         ( req_addr_set      ),
 
     // Victim way

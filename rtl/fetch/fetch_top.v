@@ -33,6 +33,7 @@ module fetch_top
  );
 assign xcpt_fetch = '0; //FIXME: connect to iTLB
 
+logic icache_ready;
 
 // Response from the Instruction Cache
 logic                                   icache_rsp_valid;
@@ -51,30 +52,37 @@ logic                   program_counter_update;
 assign program_counter_update   = ( stall_fetch | !icache_ready | !icache_rsp_valid) ? 1'b0 : 1'b1;
 assign program_counter_next     = ( take_branch ) ? branch_pc : 
                                                     program_counter + 4;
-
-`ifdef VERBOSE_FETCH
-always_ff @(posedge clock)
-begin
-    if (program_counter_update)
-    begin
-        $display("[FETCH] Program counter value is %h",program_counter);
-        $display("[FETCH] Program counter next value is %h",program_counter_next);
-    end
-end
-`endif
  
 // Request to the Instruction Cache
-logic icache_req_valid;
-logic icache_ready;
+logic icache_req_valid_next;
+logic first_req_sent,first_req_sent_ff;
 
-assign icache_req_valid = !stall_fetch & icache_ready;
+
+//         CLK    RST    EN                  DOUT               DIN              DEF
+`RST_EN_FF(clock, reset, !first_req_sent_ff, first_req_sent_ff, first_req_sent, 1'b0)
+
+
+always_comb
+begin
+    first_req_sent = first_req_sent_ff;
+    if (program_counter == `CORE_BOOT_ADDRESS & !first_req_sent_ff)
+    begin
+        icache_req_valid_next = 1'b1;
+        first_req_sent        = 1'b1;
+    end
+    else
+        icache_req_valid_next = program_counter_update;
+end
+
+logic icache_req_valid;
+//      CLK    RST     DOUT              DIN                    DEF
+`RST_FF(clock, reset, icache_req_valid, icache_req_valid_next, 1'b0)
 
 
 //     CLK    EN            DOUT                DIN                   
 `EN_FF(clock, !stall_fetch, decode_instr_data,  decode_instr_data_next)
 `EN_FF(clock, !stall_fetch, decode_instr_valid, icache_rsp_valid)
-
-assign decode_instr_pc = program_counter;
+`EN_FF(clock, !stall_fetch, decode_instr_pc,    program_counter)
 
 always_comb
 begin
@@ -133,6 +141,25 @@ itlb
     .rsp_valid_miss     (                   )
 );
 */
+
+
+`ifdef VERBOSE_FETCH
+always_ff @(posedge clock)
+begin
+    /*
+    if (program_counter_update)
+    begin
+        $display("[FETCH] Program counter value is %h",program_counter);
+        $display("[FETCH] Program counter next value is %h",program_counter_next);
+    end
+    */
+    if (decode_instr_valid)
+    begin
+        $display("[FETCH] Request to decode. PC is %h",decode_instr_pc);
+        $display("        Data to be decoded = %h",decode_instr_data);
+    end
+end
+`endif
 
 endmodule
 
