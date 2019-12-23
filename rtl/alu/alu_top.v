@@ -16,6 +16,7 @@ module alu_top
     output  decode_xcpt_t                   xcpt_decode_out,
     
     // Request from decode stage
+    input   logic                           req_alu_valid,  
     input   alu_request_t                   req_alu_info,  
     input   logic [`PC_WIDTH-1:0]           req_alu_pc,
    
@@ -37,7 +38,8 @@ module alu_top
  
     //Bypass
     output  logic [`REG_FILE_DATA_RANGE]    alu_data_bypass,
-    input   logic [`REG_FILE_DATA_RANGE]    cache_data_bypass
+    input   logic [`REG_FILE_DATA_RANGE]    cache_data_bypass,
+    input   logic                           cache_data_bp_valid
 );
 // Exceptions
 //      CLK    RST    DOUT              DIN             DEF
@@ -47,27 +49,39 @@ module alu_top
 ////////////////////////////////////
 // Request to D$ stage
 
-//  CLK    DOUT          DIN
-`FF(clock, req_dcache_pc,req_alu_pc)
-
-
 dcache_request_t req_dcache_info_next;
 logic  req_mem_instr_next;
 logic  req_int_instr_next;
 
-assign  req_mem_instr_next = (req_alu_info.opcode == `INSTR_M_TYPE) ? 1'b1 : 1'b0;
-assign  req_int_instr_next = (req_alu_info.opcode == `INSTR_R_TYPE) ? 1'b1 : // R-type 
+logic alu_hazard;
+assign alu_hazard = stall_alu | alu_busy_next;
+
+
+// If ALU was stalled then we need to send the request we were processing
+// again
+logic stall_alu_ff, req_dcache_valid_ff;
+//  CLK    DOUT          DIN
+`FF(clock, stall_alu_ff, stall_alu)
+
+assign req_dcache_valid = req_dcache_valid_ff | (stall_alu_ff & !stall_alu);
+
+
+// Compute if request to be sent to the D$ has to access memory or not
+assign  req_mem_instr_next = (is_m_type_instr(req_alu_info.opcode)) ? 1'b1 : 1'b0;
+
+assign  req_int_instr_next = (is_r_type_instr(req_alu_info.opcode)) ? 1'b1 : // R-type 
                              (!alu_busy_next & alu_busy)            ? 1'b1 : // MUL
                                                                       1'b0 ; // M-type or B-type
 
-//  CLK    DOUT              DIN
-`FF(clock, req_dcache_info,  req_dcache_info_next)
-`FF(clock, req_m_type_instr, req_mem_instr_next)
-`FF(clock, req_r_type_instr, req_int_instr_next)
-`FF(clock, req_dst_reg,      req_alu_info.rd_addr)
+//     CLK    EN           DOUT              DIN
+`EN_FF(clock, !alu_hazard, req_dcache_info,  req_dcache_info_next)
+`EN_FF(clock, !alu_hazard, req_m_type_instr, req_mem_instr_next)
+`EN_FF(clock, !alu_hazard, req_r_type_instr, req_int_instr_next)
+`EN_FF(clock, !alu_hazard, req_dst_reg,      req_alu_info.rd_addr)
+`EN_FF(clock, !alu_hazard, req_dcache_pc,    req_alu_pc)
 
-//      CLK    RST    DOUT              DIN                          DEF
-`RST_FF(clock, reset, req_dcache_valid, !stall_alu & !alu_busy_next, '0)
+//      CLK    RST    DOUT                 DIN            DEF
+`RST_FF(clock, reset, req_dcache_valid_ff, req_alu_valid, 1'b0)
 
 
 ////////////////////////////////////
@@ -99,6 +113,11 @@ logic			 	    take_branch_next;
 // Bypass data
 
 assign alu_data_bypass = req_dcache_info_next.data;
+
+logic cache_req_is_load;
+//      CLK    RST    DOUT               DIN                                 DEF
+`RST_FF(clock, reset, cache_req_is_load, is_load_instr(req_alu_info.opcode), 1'b0)
+
 
 ////////////////////////////////////
 // Perform ALU instruction
@@ -134,21 +153,26 @@ begin
         //ADDI
         else if (req_alu_info.opcode == `INSTR_ADDI_OPCODE)
         begin
-            alu_mul_data = req_alu_info.ra_data * req_alu_info.offset;
+            req_dcache_info_next.data = req_alu_info.ra_data + req_alu_info.offset;
         end
-
         // MEM
-	    else if (req_alu_info.opcode == `INSTR_M_TYPE) 
+	    else if (is_m_type_instr(req_alu_info.opcode)) 
         begin
-            req_dcache_info_next.addr   = (  (  req_alu_info.opcode == `INSTR_LDB_OPCODE 
-                                              | req_alu_info.opcode == `INSTR_LDW_OPCODE)
-                                           & (req_dst_reg == req_alu_info.rd_addr))? cache_data_bypass : // Bypass Cache to Cache_next
-                                                                                     req_alu_info.ra_data + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset);
+            //LD
+            if (is_load_instr(req_alu_info.opcode))
+                req_dcache_info_next.addr = (  req_dst_reg == req_alu_info.ra_addr
+                                             & cache_data_bp_valid              ) ? cache_data_bypass    + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) : // Bypass Cache to Cache_next
+                                                                                    req_alu_info.ra_data + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) ;
+            //ST
+            else
+                req_dcache_info_next.addr = (  req_dst_reg == req_alu_info.rd_addr
+                                             & cache_data_bp_valid)               ? cache_data_bypass    + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) : // Bypass Cache to Cache_next
+                                                                                    req_alu_info.rb_data + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) ;
 
             // Used only on store requests
-	    	req_dcache_info_next.data   = (  (req_alu_info.opcode == `INSTR_LDB_OPCODE | req_alu_info.opcode == `INSTR_LDW_OPCODE)
+	    	req_dcache_info_next.data   = (  cache_req_is_load & cache_data_bp_valid
                                            & (req_dst_reg == req_alu_info.ra_addr))? cache_data_bypass : // Bypass Cache to Cache_next
-                                                                                     req_alu_info.ra_data + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset);
+                                                                                     req_alu_info.ra_data;
             
             // Specify LD or ST for dcache request
             if (req_alu_info.opcode == `INSTR_LDB_OPCODE | req_alu_info.opcode == `INSTR_LDW_OPCODE)
