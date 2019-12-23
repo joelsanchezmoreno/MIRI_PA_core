@@ -8,6 +8,7 @@ module decode_top
 
     // Stall pipeline
     input   logic                           stall_decode,
+    output  logic                           decode_hazard,
 
     // Exceptions. WB takes care of managing exceptions and priorities
     input   fetch_xcpt_t                    xcpt_fetch_in,
@@ -42,21 +43,35 @@ module decode_top
 
 /////////////////////////////////////////
 // Control logic for signals to be sent to ALU
-logic           req_to_alu_valid_next;
+logic           req_to_alu_valid_next, req_to_alu_valid_ff;
 alu_request_t   req_to_alu_info_next;
-
 decode_xcpt_t decode_xcpt_next;
 
-assign req_to_alu_valid_next = ( !stall_decode & fetch_instr_valid) ? 1'b1 : 1'b0;
+
+logic           stall_decode_ff;
 
 //  CLK    DOUT             DIN
-`FF(clock, req_to_alu_info, req_to_alu_info_next)
-`FF(clock, req_to_alu_pc,   fetch_instr_pc)
+`FF(clock, stall_decode_ff, stall_decode)
 
-//      CLK    RST    DOUT                DIN                      DEF
-`RST_FF(clock, reset, req_to_alu_valid, req_to_alu_valid_next, '0)
-`RST_FF(clock, reset, decode_xcpt,      decode_xcpt_next,      '0)
-`RST_FF(clock, reset, xcpt_fetch_out,   xcpt_fetch_in,         '0)
+
+assign req_to_alu_valid_next = ( !stall_decode & fetch_instr_valid ) ? 1'b1 : // New instruction from fetch
+                               ( decode_hazard                     ) ? 1'b1 : // Was stall and we need to send same request again
+                                                                       1'b0;
+
+// If decode was stalled then we need to send the request we were processing
+// again, which means that we cannot perform the request sent by the fetch
+// stage and we need fetch stage to wait one extra cycle                                                                  
+assign decode_hazard = ( !stall_decode & stall_decode_ff );                                                                  
+assign req_to_alu_valid = req_to_alu_valid_ff | decode_hazard;
+
+//      CLK    RST    DOUT                 DIN                      DEF
+`RST_FF(clock, reset, req_to_alu_valid_ff, req_to_alu_valid_next, '0)
+`RST_FF(clock, reset, decode_xcpt,         decode_xcpt_next,      '0)
+`RST_FF(clock, reset, xcpt_fetch_out,      xcpt_fetch_in,         '0)
+
+//         CLK    RST    EN                     DOUT             DIN                    DEF
+`RST_EN_FF(clock, reset, req_to_alu_valid_next, req_to_alu_info, req_to_alu_info_next, '0)
+`RST_EN_FF(clock, reset, req_to_alu_valid_next, req_to_alu_pc,   fetch_instr_pc, '0)
 
 /////////////////////////////////////////
 // Register file signals      
@@ -95,20 +110,23 @@ begin
 
     // Register A value depends on the instructions being performed at the
     // alu and cache stage at this cycle, because we may need to bypass data
-    req_to_alu_info_next.ra_data = (  opcode_alu_ff == `INSTR_R_TYPE   
+    req_to_alu_info_next.ra_data = (  is_r_type_instr(opcode_alu_ff)   
                                     & rd_alu_ff   == fetch_instr_data[`INSTR_SRC1_ADDR_RANGE] ) ? alu_data_bypass   : // Bypass from ALU  
 
-                                   (  ( opcode_alu_2_ff == `INSTR_LDB_OPCODE | opcode_alu_2_ff == `INSTR_LDW_OPCODE)
+                                   ( (is_r_type_instr(opcode_alu_2_ff) |  is_load_instr(opcode_alu_2_ff))
                                     & rd_alu_ff_2 == fetch_instr_data[`INSTR_SRC1_ADDR_RANGE]  
                                     & cache_data_valid)                                         ? cache_data_bypass : //Bypass from Cache (hit on LD req)
 
-				    					    					                                 rf_reg1_data; // data from register file
+				    					    					                                  rf_reg1_data; // data from register file
 
     // Use RD to store src2
-    req_to_alu_info_next.rb_data = (opcode_alu_ff == `INSTR_R_TYPE & rd_alu_ff == fetch_instr_data[`INSTR_SRC2_ADDR_RANGE]) ? alu_data_bypass : // Bypass from ALU
-                                   ((  opcode_alu_2_ff == `INSTR_LDB_OPCODE | opcode_alu_2_ff == `INSTR_LDW_OPCODE )
-                                     & rd_alu_ff_2 == fetch_instr_data[`INSTR_SRC2_ADDR_RANGE] & cache_data_valid)          ? cache_data_bypass : //Bypass from Cache (hit on LD req)
-				   										                                                                      rf_reg2_data; // data from register file
+    req_to_alu_info_next.rb_data = (  is_r_type_instr(opcode_alu_ff) 
+                                    & rd_alu_ff == fetch_instr_data[`INSTR_SRC2_ADDR_RANGE]) ? alu_data_bypass : // Bypass from ALU
+
+                                   (  (is_r_type_instr(opcode_alu_2_ff) |  is_load_instr(opcode_alu_2_ff))
+                                     & rd_alu_ff_2 == fetch_instr_data[`INSTR_SRC2_ADDR_RANGE] 
+                                     & cache_data_valid)                                                   ? cache_data_bypass : //Bypass from Cache (hit on LD req)
+				   										                                                     rf_reg2_data; // data from register file
 
     // Encoding for ADDI and M-type instructions                                                                                                                     
     req_to_alu_info_next.offset = `ZX(`ALU_OFFSET_WIDTH,fetch_instr_data[14:0]);
@@ -116,50 +134,30 @@ begin
     ////////////////////////////////////////////////
     // Decode instruction to determine RB or offset 
     
-    if ( fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_M_TYPE )  
+    //FIXME: [Optional] Need to add MOV, TLBWRITE and IRET decoding
+    // B-format
+    if (  fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]  == `INSTR_BEQ_OPCODE 
+        | fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]  == `INSTR_JUMP_OPCODE)  
     begin
-        // If it is a store request we have to take into account that RD value
-        // could have been computed on ALU stage or brought from memory on cache
-        // stage
-	    if (fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_STB_OPCODE | 
-            fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_STW_OPCODE  )//if store, we take rd value or (BP)
+    
+        if ( fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_BEQ_OPCODE) // BEQ CASE
         begin
-		    req_to_alu_info_next.rd_addr =  (  opcode_alu_ff == `INSTR_R_TYPE  
-                                             & rd_alu_ff     == fetch_instr_data[`INSTR_DST_ADDR_RANGE] ) ? alu_data_bypass[`REG_FILE_ADDR_RANGE] : // Bypass from ALU
-
-		       				                (  (  opcode_alu_2_ff == `INSTR_LDB_OPCODE 
-                                                | opcode_alu_2_ff == `INSTR_LDW_OPCODE )
-                                             & rd_alu_ff_2 == fetch_instr_data[`INSTR_DST_ADDR_RANGE]) ? cache_data_bypass[`REG_FILE_ADDR_RANGE] : //Bypass from Cache (hit on LD req)
-										                                                                 rf_reg2_data[`REG_FILE_ADDR_RANGE]; // data from register file
+            req_to_alu_info_next.offset = `ZX(`ALU_OFFSET_WIDTH, {fetch_instr_data[`INSTR_OFFSET_HI_ADDR_RANGE], 
+                                                                  fetch_instr_data[`INSTR_OFFSET_LO_ADDR_RANGE]}); 
+        end
+        else // JUMP CASE
+        begin
+            req_to_alu_info_next.offset = `ZX(`ALU_OFFSET_WIDTH, {fetch_instr_data[`INSTR_OFFSET_HI_ADDR_RANGE], 
+                                                                  fetch_instr_data[`INSTR_OFFSET_M_ADDR_RANGE], 
+                                                                  fetch_instr_data[`INSTR_OFFSET_LO_ADDR_RANGE]}); 
         end
     end
-    else 
+    else
     begin
-        //FIXME: [Optional] Need to add MOV, TLBWRITE and IRET decoding
-        // B-format
-        if (  fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]  == `INSTR_BEQ_OPCODE 
-            | fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]  == `INSTR_JUMP_OPCODE)  
-        begin
-	    
-            if ( fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_BEQ_OPCODE) // BEQ CASE
-            begin
-	            req_to_alu_info_next.offset = `ZX(`ALU_OFFSET_WIDTH, {fetch_instr_data[`INSTR_OFFSET_HI_ADDR_RANGE], 
-                                                                      fetch_instr_data[`INSTR_OFFSET_LO_ADDR_RANGE]}); 
-            end
-            else // JUMP CASE
-            begin
-    	        req_to_alu_info_next.offset = `ZX(`ALU_OFFSET_WIDTH, {fetch_instr_data[`INSTR_OFFSET_HI_ADDR_RANGE], 
-                                                                      fetch_instr_data[`INSTR_OFFSET_M_ADDR_RANGE], 
-                                                                      fetch_instr_data[`INSTR_OFFSET_LO_ADDR_RANGE]}); 
-            end
-        end
-        else
-        begin
-            if (  fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_R_TYPE 
-                & fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]  != `INSTR_NOP_OPCODE)
-                // Raise an exception because the instruction is not supported
-                decode_xcpt_next.xcpt_illegal_instr = 1'b1;
-        end
+        if (  is_r_type_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]) 
+            & fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]  != `INSTR_NOP_OPCODE)
+            // Raise an exception because the instruction is not supported
+            decode_xcpt_next.xcpt_illegal_instr = 1'b1;
     end
 end
 
