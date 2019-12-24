@@ -267,6 +267,7 @@ begin
     end
 end
 
+`ifdef VERBOSE_CORETB       
 always_ff @(posedge clk_i) 
 begin
     // If there is a request from the D$ and we are not busy sending the
@@ -276,9 +277,7 @@ begin
         if ( mem_req_count_ff >= `LATENCY_MM_REQ-1 &
              rsp_mm_valid)
         begin
-            `ifdef VERBOSE_CORETB       
-                $display("[CORE TB] Response arbiter. Data to D$ %h",rsp_mm_data);                               
-            `endif
+            $display("[CORE TB] Response arbiter. Data to D$ %h",rsp_mm_data);                               
         end
     end
 
@@ -288,12 +287,14 @@ begin
     begin
         if ( mem_req_count_ff >= `LATENCY_MM_REQ-1 & rsp_mm_valid)
         begin     
-            `ifdef VERBOSE_CORETB       
-                $display("[CORE TB] Response arbiter. Data to I$ %h",rsp_mm_data);   
-            `endif                    
+            $display("[CORE TB] Response arbiter. Data to I$ %h",rsp_mm_data);   
         end
     end
+
+    if ( rsp_mm_data == '1 & rsp_mm_valid)
+        $finish;
 end
+`endif
 
 endmodule
 
