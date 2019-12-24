@@ -62,7 +62,7 @@ assign req_to_alu_valid_next = ( !stall_decode & fetch_instr_valid ) ? 1'b1 : //
 // again, which means that we cannot perform the request sent by the fetch
 // stage and we need fetch stage to wait one extra cycle                                                                  
 assign decode_hazard = ( !stall_decode & stall_decode_ff );                                                                  
-assign req_to_alu_valid = req_to_alu_valid_ff | decode_hazard;
+assign req_to_alu_valid = !stall_decode & (req_to_alu_valid_ff | decode_hazard);
 
 //      CLK    RST    DOUT                 DIN                      DEF
 `RST_FF(clock, reset, req_to_alu_valid_ff, req_to_alu_valid_next, '0)
@@ -85,17 +85,19 @@ logic [`REG_FILE_DATA_RANGE] rf_reg2_data;
 logic [`REG_FILE_ADDR_RANGE] rd_alu_ff;
 logic [`INSTR_OPCODE_RANGE]  opcode_alu_ff; // We store the opcode to check if it was an R-type instr, so the result is computed on ALU stage
 
-//  CLK    DOUT           DIN
-`FF(clock, rd_alu_ff,     fetch_instr_data[`INSTR_DST_ADDR_RANGE]) 
-`FF(clock, opcode_alu_ff, fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]) 
+//     CLK    EN                              DOUT           DIN
+`EN_FF(clock, !stall_decode & !decode_hazard, rd_alu_ff,     fetch_instr_data[`INSTR_DST_ADDR_RANGE]) 
+`EN_FF(clock, !stall_decode & !decode_hazard, opcode_alu_ff, fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]) 
+//`EN_FF(clock, !decode_hazard & req_to_alu_valid, rd_alu_ff,     fetch_instr_data[`INSTR_DST_ADDR_RANGE]) 
+//`EN_FF(clock, !decode_hazard & req_to_alu_valid, opcode_alu_ff, fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]) 
 
 // Bypass from cache
 logic [`REG_FILE_ADDR_RANGE] rd_alu_ff_2;
 logic [`INSTR_OPCODE_RANGE]  opcode_alu_2_ff; // We store the opcode to check if it was an M-type instr, so the result is computed on cache stage
 
-//  CLK    DOUT             DIN
-`FF(clock, rd_alu_ff_2,     rd_alu_ff)    
-`FF(clock, opcode_alu_2_ff, opcode_alu_ff) 
+//     CLK    EN                              DOUT             DIN
+`EN_FF(clock, !stall_decode & !decode_hazard, rd_alu_ff_2,     rd_alu_ff)    
+`EN_FF(clock, !stall_decode & !decode_hazard, opcode_alu_2_ff, opcode_alu_ff) 
 
 always_comb	
 begin
@@ -213,6 +215,24 @@ begin
         $display("         ra data =  %h",req_to_alu_info.ra_data);
         $display("         rb data =  %h",req_to_alu_info.rb_data);
         $display("         offset  =  %h",req_to_alu_info.offset );
+        $display("[RF]     src1_addr    = %h",src1_addr);
+        $display("         src2_addr    = %h",src2_addr);
+        $display("         rf_reg1_data = %h",rf_reg1_data);
+        $display("         rf_reg2_data = %h",rf_reg2_data);
+     `ifdef VERBOSE_DECODE_BYPASS
+        $display("[BYPASSES SRC2]");
+        $display("         is_r_type_instr(opcode_alu_ff) = %h",is_r_type_instr(opcode_alu_ff));
+        $display("         rd_alu_ff   = %h",rd_alu_ff);
+        $display("         fetch_instr_data[`INSTR_SRC2_ADDR_RANGE]= %h",fetch_instr_data[`INSTR_SRC2_ADDR_RANGE]);
+        $display("         alu_data_bypass   = %h",alu_data_bypass);
+        $display("         ----------------------");
+        $display("         is_r_type_instr(opcode_alu_2_ff) = %h",is_r_type_instr(opcode_alu_2_ff));
+        $display("         is_m_type_instr(opcode_alu_2_ff) = %h",is_m_type_instr(opcode_alu_2_ff));
+        $display("         rd_alu_ff_2   = %h",rd_alu_ff_2);
+        $display("         fetch_instr_data[`INSTR_SRC2_ADDR_RANGE]= %h",fetch_instr_data[`INSTR_SRC2_ADDR_RANGE]);
+        $display("         cache_data_valid   = %h",cache_data_valid);
+        $display("         cache_data_bypass  = %h",cache_data_bypass);
+     `endif
     end
 end
 `endif

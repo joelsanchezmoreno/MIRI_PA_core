@@ -78,11 +78,22 @@ logic icache_req_valid;
 //      CLK    RST     DOUT              DIN                    DEF
 `RST_FF(clock, reset, icache_req_valid, icache_req_valid_next, 1'b0)
 
+//         CLK    RST     EN            DOUT               DIN              DEF
+`RST_EN_FF(clock, reset, !stall_fetch, decode_instr_valid, icache_rsp_valid,1'b0)
 
 //     CLK    EN            DOUT                DIN                   
-`EN_FF(clock, !stall_fetch, decode_instr_data,  decode_instr_data_next)
 `EN_FF(clock, !stall_fetch, decode_instr_valid, icache_rsp_valid)
-`EN_FF(clock, !stall_fetch, decode_instr_pc,    program_counter)
+
+// In case of stall we mantain the value of the instr to be decoded because
+// Decode stage may need it to relaunch the instruction
+logic   [`INSTR_WIDTH-1:0]          decode_instr_data_ff;
+logic   [`PC_WIDTH-1:0]             decode_instr_pc_ff;
+
+//     CLK    EN            DOUT                   DIN                   
+`EN_FF(clock, !stall_fetch, decode_instr_data_ff,  decode_instr_data_next)
+`EN_FF(clock, !stall_fetch, decode_instr_pc_ff,    program_counter)
+assign decode_instr_data = (!stall_fetch) ? decode_instr_data_ff : decode_instr_data; 
+assign decode_instr_pc   = (!stall_fetch) ? decode_instr_pc_ff : decode_instr_pc;
 
 always_comb
 begin
