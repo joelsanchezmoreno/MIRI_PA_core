@@ -31,8 +31,9 @@ module fetch_top
     input   logic [`ICACHE_LINE_WIDTH-1:0]      rsp_data_miss,
     input   logic                               rsp_valid_miss
  );
-assign xcpt_fetch = '0; //FIXME: connect to iTLB
 
+/////////////////////////////////////////
+// Signals
 logic icache_ready;
 
 // Response from the Instruction Cache
@@ -41,6 +42,11 @@ logic [`ICACHE_LINE_WIDTH-1:0]          icache_rsp_data;
 logic [`ICACHE_INSTR_IN_LINE_WIDTH-1:0] word_in_line;
 logic [`INSTR_WIDTH-1:0]                decode_instr_data_next;
 
+/////////////////////////////////////////
+// Exceptions
+assign xcpt_fetch = '0; //FIXME: connect to iTLB
+
+/////////////////////////////////////////
 // Program counter
 logic   [`PC_WIDTH-1:0] program_counter;
 logic   [`PC_WIDTH-1:0] program_counter_next;
@@ -52,15 +58,16 @@ logic                   program_counter_update;
 assign program_counter_update   = ( stall_fetch | !icache_ready | !icache_rsp_valid) ? 1'b0 : 1'b1;
 assign program_counter_next     = ( take_branch ) ? branch_pc : 
                                                     program_counter + 4;
- 
+
+/////////////////////////////////////////                                                
 // Request to the Instruction Cache
+logic icache_req_valid;
+logic icache_req_valid_ff;
 logic icache_req_valid_next;
 logic first_req_sent,first_req_sent_ff;
 
-
 //         CLK    RST    EN                  DOUT               DIN              DEF
 `RST_EN_FF(clock, reset, !first_req_sent_ff, first_req_sent_ff, first_req_sent, 1'b0)
-
 
 always_comb
 begin
@@ -74,26 +81,32 @@ begin
         icache_req_valid_next = program_counter_update;
 end
 
-logic icache_req_valid;
-//      CLK    RST     DOUT              DIN                    DEF
-`RST_FF(clock, reset, icache_req_valid, icache_req_valid_next, 1'b0)
+//      CLK    RST    DOUT                 DIN                    DEF
+`RST_FF(clock, reset, icache_req_valid_ff, icache_req_valid_next, 1'b0)
 
-//         CLK    RST     EN            DOUT               DIN              DEF
-`RST_EN_FF(clock, reset, !stall_fetch, decode_instr_valid, icache_rsp_valid,1'b0)
+assign icache_req_valid = (stall_fetch) ? 1'b0 :
+                                          icache_req_valid_ff;
 
-//     CLK    EN            DOUT                DIN                   
-`EN_FF(clock, !stall_fetch, decode_instr_valid, icache_rsp_valid)
+/////////////////////////////////////////
+// Fetch to Decode
 
 // In case of stall we mantain the value of the instr to be decoded because
-// Decode stage may need it to relaunch the instruction
+// decode stage may need it to relaunch the instruction
+logic                               decode_instr_valid_ff;
 logic   [`INSTR_WIDTH-1:0]          decode_instr_data_ff;
 logic   [`PC_WIDTH-1:0]             decode_instr_pc_ff;
+
+//         CLK    RST     EN           DOUT                   DIN               DEF
+`RST_EN_FF(clock, reset, !stall_fetch, decode_instr_valid_ff, icache_rsp_valid, 1'b0)
+
 
 //     CLK    EN            DOUT                   DIN                   
 `EN_FF(clock, !stall_fetch, decode_instr_data_ff,  decode_instr_data_next)
 `EN_FF(clock, !stall_fetch, decode_instr_pc_ff,    program_counter)
-assign decode_instr_data = (!stall_fetch) ? decode_instr_data_ff : decode_instr_data; 
-assign decode_instr_pc   = (!stall_fetch) ? decode_instr_pc_ff : decode_instr_pc;
+
+assign decode_instr_valid = (stall_fetch) ? 1'b0              : decode_instr_valid_ff;
+assign decode_instr_data  = (stall_fetch) ? decode_instr_data : decode_instr_data_ff; 
+assign decode_instr_pc    = (stall_fetch) ? decode_instr_pc   : decode_instr_pc_ff;
 
 always_comb
 begin
@@ -101,6 +114,8 @@ begin
     decode_instr_data_next  = icache_rsp_data[`INSTR_WIDTH*word_in_line+:`INSTR_WIDTH];
 end
 
+/////////////////////////////////////////
+// Instruction Cache instance
 instruction_cache
 icache(
     // System signals
@@ -153,7 +168,8 @@ itlb
 );
 */
 
-
+/////////////////////////////////////////
+// Verbose
 `ifdef VERBOSE_FETCH
 always_ff @(posedge clock)
 begin

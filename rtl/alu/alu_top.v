@@ -41,86 +41,103 @@ module alu_top
     input   logic [`REG_FILE_DATA_RANGE]    cache_data_bypass,
     input   logic                           cache_data_bp_valid
 );
+
+logic alu_hazard;
+
+logic   alu_busy_next;
+assign alu_hazard = stall_alu | alu_busy_next; 
+
+//////////////////////////////////////
 // Exceptions
-//      CLK    RST    DOUT              DIN             DEF
-`RST_FF(clock, reset, xcpt_decode_out,  xcpt_decode_in, '0)
-`RST_FF(clock, reset, xcpt_fetch_out,   xcpt_fetch_in,  '0)
+fetch_xcpt_t    xcpt_fetch_ff;
+decode_xcpt_t   xcpt_decode_ff;
+
+//         CLK    RST    EN           DOUT             DIN             DEF
+`RST_EN_FF(clock, reset, !alu_hazard, xcpt_decode_ff,  xcpt_decode_in, '0)
+`RST_EN_FF(clock, reset, !alu_hazard, xcpt_fetch_ff,   xcpt_fetch_in,  '0)
+
+assign xcpt_decode_out  = (alu_hazard) ? xcpt_decode_out : xcpt_decode_ff;
+assign xcpt_fetch_out   = (alu_hazard) ? xcpt_fetch_out  : xcpt_fetch_ff;
 
 ////////////////////////////////////
 // Request to D$ stage
 
+logic            req_dcache_valid_ff;
 dcache_request_t req_dcache_info_next;
-logic  req_mem_instr_next;
-logic  req_int_instr_next;
+dcache_request_t req_dcache_info_ff;
 
-logic alu_hazard;
-assign alu_hazard = stall_alu | alu_busy_next;
+logic  req_m_type_instr_next;
+logic  req_m_type_instr_ff;
+logic  req_r_type_instr_next;
+logic  req_r_type_instr_ff;
 
-
-// If ALU was stalled then we need to send the request we were processing
-// again
-logic stall_alu_ff, req_dcache_valid_ff;
-//  CLK    DOUT          DIN
-`FF(clock, stall_alu_ff, stall_alu)
-
-assign req_dcache_valid = req_dcache_valid_ff | (stall_alu_ff & !stall_alu);
+logic [`PC_WIDTH-1:0]           req_dcache_pc_ff;
+logic [`REG_FILE_ADDR_RANGE]    req_dst_reg_ff;
 
 
 // Compute if request to be sent to the D$ has to access memory or not
-assign  req_mem_instr_next = (is_m_type_instr(req_alu_info.opcode)) ? 1'b1 : 1'b0;
+assign  req_m_type_instr_next = (is_m_type_instr(req_alu_info.opcode)) ? 1'b1 : 1'b0;
 
-assign  req_int_instr_next = (is_r_type_instr(req_alu_info.opcode)) ? 1'b1 : // R-type 
-                             (!alu_busy_next & alu_busy)            ? 1'b1 : // MUL
-                                                                      1'b0 ; // M-type or B-type
+assign  req_r_type_instr_next = (is_r_type_instr(req_alu_info.opcode)) ? 1'b1 : // R-type 
+                                (!alu_busy_next & alu_busy)            ? 1'b1 : // MUL
+                                                                         1'b0 ; // M-type or B-type
 
-//     CLK    EN           DOUT              DIN
-`EN_FF(clock, !alu_hazard, req_dcache_info,  req_dcache_info_next)
-`EN_FF(clock, !alu_hazard, req_m_type_instr, req_mem_instr_next)
-`EN_FF(clock, !alu_hazard, req_r_type_instr, req_int_instr_next)
-`EN_FF(clock, !alu_hazard, req_dst_reg,      req_alu_info.rd_addr)
-`EN_FF(clock, !alu_hazard, req_dcache_pc,    req_alu_pc)
+//     CLK    EN                                  DOUT                 DIN
+`EN_FF(clock, !alu_hazard | cache_data_bp_valid,  req_dcache_info_ff,  req_dcache_info_next)
+`EN_FF(clock, !alu_hazard,                        req_m_type_instr_ff, req_m_type_instr_next)
+`EN_FF(clock, !alu_hazard,                        req_r_type_instr_ff, req_r_type_instr_next)
+`EN_FF(clock, !alu_hazard,                        req_dst_reg_ff,      req_alu_info.rd_addr)
+`EN_FF(clock, !alu_hazard,                        req_dcache_pc_ff,    req_alu_pc)
 
-//      CLK    RST    DOUT                 DIN            DEF
-`RST_FF(clock, reset, req_dcache_valid_ff, req_alu_valid, 1'b0)
+//         CLK    RST    EN           DOUT                 DIN            DEF
+`RST_EN_FF(clock, reset, !alu_hazard, req_dcache_valid_ff, req_alu_valid, 1'b0)
 
+assign req_dcache_valid = (alu_hazard) ? 1'b0 : req_dcache_valid_ff;
+
+assign req_dcache_info  = (alu_hazard) ? req_dcache_info  : req_dcache_info_ff;
+assign req_m_type_instr = (alu_hazard) ? req_m_type_instr : req_m_type_instr_ff;
+assign req_r_type_instr = (alu_hazard) ? req_r_type_instr : req_r_type_instr_ff;
+assign req_dst_reg      = (alu_hazard) ? req_dst_reg      : req_dst_reg_ff;
+assign req_dcache_pc    = (alu_hazard) ? req_dcache_pc    : req_dcache_pc_ff;
 
 ////////////////////////////////////
 // ALU is busy when we perform MUL operation
-logic   alu_busy_next;
 logic [`REG_FILE_DATA_RANGE] alu_mul_data;
 logic [`REG_FILE_DATA_RANGE] alu_mul_data_ff;
 
-//      CLK   RST    DOUT      DIN           DEF
-`RST_FF(clock,reset, alu_busy, alu_busy_next,1'b0)
+//         CLK   RST    EN          DOUT      DIN            DEF
+`RST_EN_FF(clock,reset, !stall_alu, alu_busy, alu_busy_next, 1'b0)
 
 //     CLK   EN                         DOUT             DIN
 `EN_FF(clock,!alu_busy & alu_busy_next, alu_mul_data_ff, alu_mul_data)
-
 
 ////////////////////////////////////
 // Branch signals
 logic [`PC_WIDTH-1:0]   branch_pc_next;
 logic			 	    take_branch_next;
 
-//      CLK    RST    DOUT         DIN                  DEF
-`RST_FF(clock, reset, take_branch, take_branch_next, 1'b0)
+//         CLK    RST    EN           DOUT         DIN               DEF
+`RST_EN_FF(clock, reset, !alu_hazard, take_branch, take_branch_next, 1'b0)
 
-//  CLK    DOUT       DIN
-`FF(clock, branch_pc, branch_pc_next)
+//     CLK    EN           DOUT       DIN
+`EN_FF(clock, !alu_hazard, branch_pc, branch_pc_next)
 
 
 ////////////////////////////////////
 // Bypass data
 
-assign alu_data_bypass = req_dcache_info_next.data;
+assign alu_data_bypass = (alu_hazard) ? alu_data_bypass : req_dcache_info_next.data;
 
 logic cache_req_is_load;
-//      CLK    RST    DOUT               DIN                                 DEF
-`RST_FF(clock, reset, cache_req_is_load, is_load_instr(req_alu_info.opcode), 1'b0)
+//         CLK    RST    EN           DOUT               DIN                                 DEF
+`RST_EN_FF(clock, reset, !alu_hazard, cache_req_is_load, is_load_instr(req_alu_info.opcode), 1'b0)
 
 
 ////////////////////////////////////
 // Perform ALU instruction
+
+logic   [`REG_FILE_DATA_RANGE]  ra_data;
+logic   [`REG_FILE_DATA_RANGE]  rb_data;
 
 always_comb
 begin
@@ -128,7 +145,11 @@ begin
     branch_pc_next       = '0;
     req_dcache_info_next = '0;
 
-    // Respond MUL request when latency has finished
+    ra_data = ((req_dst_reg == req_alu_info.ra_addr) & cache_data_bp_valid ) ? cache_data_bypass : req_alu_info.ra_data;
+    rb_data = ((req_dst_reg == req_alu_info.rb_addr) & cache_data_bp_valid ) ? cache_data_bypass : req_alu_info.rb_data;
+
+    // We assign computed MUL data to request for D$ stage once we took into
+    // account the fixed latency for this operation
     if (!alu_busy_next & alu_busy)
     begin
         req_dcache_info_next.data = alu_mul_data_ff;
@@ -138,22 +159,23 @@ begin
         // ADD
 	    if (req_alu_info.opcode == `INSTR_ADD_OPCODE)
 	    begin
-	    	req_dcache_info_next.data  = req_alu_info.ra_data + req_alu_info.rb_data;
+            $display("YOLO 420 data = %h",req_dcache_info_next.data);
+	    	req_dcache_info_next.data  = ra_data + rb_data;
 	    end
         // SUB
 	    else if (req_alu_info.opcode == `INSTR_SUB_OPCODE)
         begin
-            req_dcache_info_next.data  = req_alu_info.ra_data - req_alu_info.rb_data;
+            req_dcache_info_next.data  = ra_data - rb_data;
         end
         // MUL
 	    else if (req_alu_info.opcode == `INSTR_MUL_OPCODE)
         begin
-            alu_mul_data = req_alu_info.ra_data * req_alu_info.rb_data;
+            alu_mul_data = ra_data * rb_data;
         end
         //ADDI
         else if (req_alu_info.opcode == `INSTR_ADDI_OPCODE)
         begin
-            req_dcache_info_next.data = req_alu_info.ra_data + req_alu_info.offset;
+            req_dcache_info_next.data = ra_data + req_alu_info.offset;
         end
         // MEM
 	    else if (is_m_type_instr(req_alu_info.opcode)) 
@@ -189,7 +211,7 @@ begin
         // BEQ
 	    else if (req_alu_info.opcode == `INSTR_BEQ_OPCODE) 
 	    begin
-            if (req_alu_info.ra_data == req_alu_info.rb_data)
+            if (ra_data == rb_data)
             begin
                 branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
 	    	    take_branch_next = 1'b1;
@@ -222,33 +244,40 @@ begin
    end
 end
 
+////////////////////////////////////
 // Perform MUL
 logic [`ALU_MUL_LATENCY_RANGE] mul_count_next;
 logic [`ALU_MUL_LATENCY_RANGE] mul_count;
 
-//      CLK    RST    DOUT       DIN             DEF
-`RST_FF(clock, reset, mul_count, mul_count_next, '0)
+//         CLK    RST    EN          DOUT       DIN             DEF
+`RST_EN_FF(clock, reset, !stall_alu, mul_count, mul_count_next, '0)
 
 always_comb
 begin
     alu_busy_next   = 1'b0;
     mul_count_next  = mul_count;
 
-    if ( !alu_busy & req_alu_info.opcode == `INSTR_MUL_OPCODE )
+    // If we receive a MUL request we are going to put ALU in busy stage to
+    // stall the pipeline and we start increasing the counter
+    if ( !alu_busy )
     begin
-        alu_busy_next  = 1'b1;
-        mul_count_next = mul_count + 1'b1;
-    end
-
-    if (alu_busy)
+        if(!stall_alu & (req_alu_info.opcode == `INSTR_MUL_OPCODE & req_alu_valid))
+        begin
+            alu_busy_next  = 1'b1;
+            mul_count_next = mul_count + 1'b1;
+        end
+    end //!alu_busy 
+    else
+    // We increase the counter until we reach the fixed latency for MUL
+    // instructions
     begin
         mul_count_next = mul_count + 1'b1;
-        if (mul_count_next == `ALU_MUL_LATENCY)
+        if (!stall_alu & (mul_count_next == `ALU_MUL_LATENCY))
         begin
             alu_busy_next = 1'b0;
             mul_count_next  = '0;
         end
-    end
+    end //alu_busy 
 end
 
 `ifdef VERBOSE_ALU

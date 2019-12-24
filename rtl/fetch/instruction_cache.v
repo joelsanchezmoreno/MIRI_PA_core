@@ -103,7 +103,6 @@ begin
 
     // Do not respond to the fetch top until we ensure we have the correct
     // data
-    rsp_data        = '0;
     rsp_valid       = 1'b0;
 
     // If there is a request and we are not performing one

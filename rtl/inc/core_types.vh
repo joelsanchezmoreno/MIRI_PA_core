@@ -72,9 +72,16 @@ typedef enum logic [1:0] {
 typedef struct packed 
 {
     logic   [`REG_FILE_ADDR_RANGE]  rd_addr; // Destination register
+    logic   [`INSTR_OPCODE_RANGE]   opcode;  // Operation code
+} decode_control_t;
+
+typedef struct packed 
+{
+    logic   [`REG_FILE_ADDR_RANGE]  rd_addr; // Destination register
     logic   [`REG_FILE_ADDR_RANGE]  ra_addr; // Source register A (rs1)
+    logic   [`REG_FILE_ADDR_RANGE]  rb_addr; // Source register A (rs2)
     logic   [`REG_FILE_DATA_RANGE]  ra_data; // Source register A (rs1)
-    logic   [`REG_FILE_DATA_RANGE]  rb_data; // Source register B (rs2)
+    logic   [`REG_FILE_DATA_RANGE]  rb_data; // Source register B (rs2) or ST dst value
     logic   [`ALU_OFFSET_RANGE]     offset;  // Offset value
     logic   [`INSTR_OPCODE_RANGE]   opcode;  // Operation code
 } alu_request_t;
