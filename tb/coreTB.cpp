@@ -47,6 +47,17 @@ void coreTB::reset_tb_top(void)
 
 	advanceTimeStamp();
 
+    top->clk_i = 0;
+	top->reset_i = 1;
+	top->eval();
+
+	advanceTimeStamp();
+
+    top->clk_i = 1;
+	top->reset_i = 1;
+	top->eval();
+
+	advanceTimeStamp();
 	top->clk_i = 0;
 	top->eval();
 
