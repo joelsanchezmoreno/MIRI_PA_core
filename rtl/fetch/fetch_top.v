@@ -69,6 +69,11 @@ logic first_req_sent,first_req_sent_ff;
 //         CLK    RST    EN                  DOUT               DIN              DEF
 `RST_EN_FF(clock, reset, !first_req_sent_ff, first_req_sent_ff, first_req_sent, 1'b0)
 
+logic stall_fetch_ff;
+
+//  CLK    DOUT            DIN
+`FF(clock, stall_fetch_ff, stall_fetch)
+
 always_comb
 begin
     first_req_sent = first_req_sent_ff;
@@ -78,11 +83,12 @@ begin
         first_req_sent        = 1'b1;
     end
     else
-        icache_req_valid_next = program_counter_update;
+        icache_req_valid_next = program_counter_update | (stall_fetch_ff & !stall_fetch);
 end
 
 //      CLK    RST    DOUT                 DIN                    DEF
 `RST_FF(clock, reset, icache_req_valid_ff, icache_req_valid_next, 1'b0)
+
 
 assign icache_req_valid = (stall_fetch) ? 1'b0 :
                                           icache_req_valid_ff;
