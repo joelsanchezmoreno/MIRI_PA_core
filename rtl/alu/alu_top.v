@@ -159,7 +159,6 @@ begin
         // ADD
 	    if (req_alu_info.opcode == `INSTR_ADD_OPCODE)
 	    begin
-            $display("YOLO 420 data = %h",req_dcache_info_next.data);
 	    	req_dcache_info_next.data  = ra_data + rb_data;
 	    end
         // SUB
