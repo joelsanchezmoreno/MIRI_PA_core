@@ -36,22 +36,24 @@ generate
     for (gen_it = 0; gen_it < NUM_SET; gen_it++) 
     begin :gen_set_lru
 
-        logic [WAYS_PER_SET_W-1:0][WAYS_PER_SET-1:0]  counter;
-        logic [WAYS_PER_SET_W-1:0][WAYS_PER_SET-1:0]  counter_ff;
+        logic [WAYS_PER_SET-1:0][WAYS_PER_SET_W-1:0]  counter;
+        logic [WAYS_PER_SET-1:0][WAYS_PER_SET_W-1:0]  counter_ff;
         //logic [NUM_WAYS_W-1:0][WAYS_PER_SET-1:0]  counter;
         //logic [NUM_WAYS_W-1:0][WAYS_PER_SET-1:0]  counter_ff;
         logic [WAYS_PER_SET_W-1:0]                max_count;
         
         //      CLK    RST    DOUT        DIN      DEF
-        `RST_FF(clock, reset, counter_ff, counter, '1 )
+        `RST_FF(clock, reset, counter_ff, counter, '0 )
 
         integer i,j;
         always_comb
         begin
+            counter = counter_ff;
             // Return victim ID
             if (victim_req && victim_set == gen_it )
             begin
                 max_count = '0;
+                victim_per_set[gen_it] = '0;
                 for (i = 0; i < WAYS_PER_SET ; i++)
                 begin
                     // we look for the oldest way on the set
@@ -69,7 +71,8 @@ generate
                 for (j = 0; j < WAYS_PER_SET; j++)
                 begin
                     // we increase in one the ways as they get older
-                    counter[j] = counter_ff[j] + 1'b1;
+                    if ( counter_ff[j] <= counter_ff[update_way] )
+                        counter[j] = counter_ff[j] + 1'b1;
                 end
 
                 // We reset the counter for the new block
