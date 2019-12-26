@@ -18,11 +18,12 @@ module store_buffer
     input   store_buffer_t              push_info,
 
     // Look for the tag on the store buffer
-    input   logic                       search_valid,
-    input   logic [`DCACHE_ADDR_RANGE]  search_addr,
-    output  logic                       search_rsp_hit_tag,
-    output  logic                       search_rsp_hit_line,
-    output  store_buffer_t              search_rsp
+    input   logic                               search_valid,
+    input   logic [`DCACHE_TAG_RANGE]           search_tag,
+    input   logic [`DCACHE_WAYS_PER_SET_RANGE]  search_way,
+    output  logic                               search_rsp_hit_tag,
+    output  logic                               search_rsp_hit_way,
+    output  store_buffer_t                      search_rsp
  );
 
  ////////////////////////////////////////////////////////////////
@@ -79,7 +80,8 @@ assign oldest_info  = store_buffer_info_ff[oldest_id];
 // that hits on the store_buffer. Otherwise, if there are multiple stores for
 // the same TAG/line we could return first the newest one, and then the latest
 // one and if they target the same bytes we could be storing an old value.
-logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] max_count_search;
+logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] max_count_search_tag;
+logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] max_count_search_way;
 logic [`DCACHE_ST_BUFFER_ENTRIES_WIDTH-1:0] search_oldest;
 
 
@@ -120,7 +122,7 @@ begin
     store_buffer_valid  = store_buffer_valid_ff;
 
     search_rsp_hit_tag  = 1'b0;
-    search_rsp_hit_line = 1'b0;
+    search_rsp_hit_way  = 1'b0;
 
     free_pos = '0;
     counter  = counter_ff;
@@ -150,14 +152,15 @@ begin
     end // if (push_valid)
 
     // Search for a tag
-    max_count_search = '0;
+    max_count_search_tag = '0;
+    max_count_search_way = '0;
     if (search_valid)
     begin
         for (k = 0; k < `DCACHE_ST_BUFFER_NUM_ENTRIES; k++)
         begin
             // We check if there is a request on the buffer for the requested
             // TAG
-            if ( search_addr[`DCACHE_TAG_ADDR_RANGE] == store_buffer_info_ff[k].addr[`DCACHE_TAG_ADDR_RANGE]
+            if ( search_tag == store_buffer_info_ff[k].addr[`DCACHE_TAG_ADDR_RANGE]
                  & store_buffer_valid_ff[k]  )
             begin
                 search_rsp_hit_tag  = 1'b1;
@@ -165,34 +168,35 @@ begin
                     $display("[STORE BUFFER] search_rsp_hit_tag has been asserted");
                 `endif
                 // We always return the oldest one if there are multiple hits
-                if ( max_count_search <= counter_ff[k])
+                if ( max_count_search_tag <= counter_ff[k])
                 begin
-                    search_rsp      = store_buffer_info_ff[k];
-                    search_oldest   = k;
+                    max_count_search_tag = counter_ff[k];
+                    search_rsp           = store_buffer_info_ff[k];
+                    search_oldest        = k;
                 end
             end
 
             // We check if there is a request on the buffer for the requested
-            // set
-            if ( search_addr[`DCACHE_SET_ADDR_RANGE] == store_buffer_info_ff[k].addr[`DCACHE_SET_ADDR_RANGE]
-                 & store_buffer_valid_ff[k]  )
+            // way
+            if ( search_way == store_buffer_info_ff[k].way & store_buffer_valid_ff[k]  )
             begin
                 `ifdef VERBOSE_STORE_BUFFER
-                    $display("[STORE BUFFER] search_rsp_hit_line has been asserted");
+                    $display("[STORE BUFFER] search_rsp_hit_way has been asserted");
                 `endif
-                search_rsp_hit_line = 1'b1;
+                search_rsp_hit_way = 1'b1;
                 // We always return the oldest one if there are multiple hits.
-                // In addition, we return the request that affects the line if
+                // In addition, we return the request that affects the way if
                 // there is no request that affects the same TAG
-                if (!search_rsp_hit_tag & (max_count_search <= counter_ff[k]))
+                if (!search_rsp_hit_tag & (max_count_search_way <= counter_ff[k]))
                 begin
-                    search_rsp = store_buffer_info_ff[k];
-                    search_oldest = k;
+                    max_count_search_way = counter_ff[k];
+                    search_rsp           = store_buffer_info_ff[k];
+                    search_oldest        = k;
                 end
             end
         end
         
-        if (search_rsp_hit_line | search_rsp_hit_tag) 
+        if (search_rsp_hit_way | search_rsp_hit_tag) 
             store_buffer_valid[search_oldest] = 1'b0;
     end //!search_valid
 
