@@ -62,7 +62,7 @@ store_buffer_t  store_buffer_pop_info;
 logic store_buffer_perform;
 logic store_buffer_pending;
 logic store_buffer_full;
-assign store_buffer_perform = store_buffer_pending & !req_valid;
+assign store_buffer_perform = store_buffer_pending & !req_valid & dcache_ready;
 
 //////////////////////////////////////////////////
 // Signals to save the request information for possible next stages
@@ -93,7 +93,7 @@ assign dcache_ready = dcache_ready_ff;
 
 // Asserted when we request the store_buffer to search for a specific address
 logic search_store_buffer;
-logic [`DCACHE_ADDR_RANGE]  search_addr;
+logic [`DCACHE_TAG_RANGE]  search_tag;
 
 // Asserted if the store buffer contains a req. to the same TAG as the one requested
 // in which case we have to perform the store before returning/modifying the line
@@ -102,19 +102,19 @@ logic store_buffer_hit_tag_ff ;
 
 // Asserted if the store buffer contains a req. to the same line as the one requested
 // in which case we have to perform the store before evicting the line (if needed)
-logic store_buffer_hit_line;
-logic store_buffer_hit_line_ff;
+logic store_buffer_hit_way;
+logic store_buffer_hit_way_ff;
 
 //         CLK    RST    EN                   DOUT                      DIN                    DEF
-`RST_EN_FF(clock, reset, search_store_buffer, store_buffer_hit_tag_ff,  store_buffer_hit_tag,  '0)
-`RST_EN_FF(clock, reset, search_store_buffer, store_buffer_hit_line_ff, store_buffer_hit_line, '0)
+`RST_EN_FF(clock, reset, search_store_buffer, store_buffer_hit_tag_ff, store_buffer_hit_tag, '0)
+`RST_EN_FF(clock, reset, search_store_buffer, store_buffer_hit_way_ff, store_buffer_hit_way, '0)
 
 // Saves the request extracted from the ST buffer
 store_buffer_t pending_store_req;
 store_buffer_t pending_store_req_ff;
 
 //         CLK    RST    EN                                              DOUT                  DIN                DEF
-`RST_EN_FF(clock, reset, (store_buffer_hit_tag | store_buffer_hit_line), pending_store_req_ff, pending_store_req, '0)
+`RST_EN_FF(clock, reset, (store_buffer_hit_tag | store_buffer_hit_way), pending_store_req_ff, pending_store_req, '0)
 
 // Saves the request received in case we need to perform a request from the ST
 // buffer
@@ -175,15 +175,14 @@ begin
             req_offset = req_info.addr[`DCACHE_OFFSET_ADDR_RANGE] >> $clog2(req_info.size+1);
 
             // Check that requested size and offset fits on the line
-            if ( req_valid & 
-                 ((req_info.size+1)*`BYTE_BITS*(req_offset)+(req_info.size+1)*`BYTE_BITS) > `DCACHE_LINE_WIDTH )
+            if ( req_valid & (req_info.size != Byte ) & ((req_offset*(req_info.size+1)*8) > `DCACHE_LINE_WIDTH ))
             begin
                 xcpt_address_fault = 1'b1;
                 `ifdef VERBOSE_DCACHE
                     $display("[DCACHE]  Exception triggered");
                     $display("          size       = %h",req_info.size);
                     $display("          offset     = %h",req_offset);
-                    $display("          addr_fault = %h",(req_info.size+1)*`BYTE_BITS*req_offset+(req_info.size+1)*`BYTE_BITS);
+                    $display("          addr_fault = %h",req_info.addr);
                     $display("          max addr   = %h",`DCACHE_LINE_WIDTH-1);
                 `endif
             end
@@ -191,11 +190,6 @@ begin
             // Perform the request
             else if (req_valid)
             begin
-                // Look on the ST buffer if there are pendent requests for
-                // that entry
-                search_store_buffer = !req_info.is_store; //Search only when is a LD
-                search_addr         = req_info.addr;
-
                 // Look if the requested tag is on the cache
                 for (iter = 0; iter < `DCACHE_WAYS_PER_SET; iter++)
                 begin
@@ -207,6 +201,27 @@ begin
                         hit_way         = iter;
                     end
                 end
+
+                // Look on the ST buffer if there are pendent requests for
+                // the requested address. 
+                //    LD miss -- look if we need to modify the line to be
+                //               evicted in case evict is needed
+                //    LD hit  -- look if we need to modify the line before
+                //               returning the data
+                //    ST miss -- look if we need to modify the line to be
+                //               evicted in case evict is needed
+                //    ST hit  -- we just push the request to ST buffer, no
+                //               need to look for requests to the same way/tag
+
+                // Position of the way to be written
+                if (!dcache_tags_hit)
+                    req_target_pos = miss_dcache_way + req_set*`DCACHE_WAYS_PER_SET;
+                    
+                search_store_buffer = ( req_info.is_store & dcache_tags_hit  ) ? 1'b0 : // ST hit
+                                      (!req_info.is_store & dcache_tags_hit  ) ? 1'b1 : // LD hit
+                                                                                 dCache_dirty_ff[req_target_pos]; // LD/ST miss                                      
+
+                search_tag          = req_info.addr[`DCACHE_TAG_ADDR_RANGE];
 
                 // [INFO] If we hit on the D$ we may hit on the ST buffer 
                 // since the ST buffer cannot have requests to lines that
@@ -241,11 +256,16 @@ begin
                             $display("         addr = %h",req_info.addr);
                         `endif
 
-                        rsp_data  = dCache_data_ff[req_target_pos] >> ((req_info.size+1)*`BYTE_BITS*req_offset) ;
                         if ( req_info.size == Byte)
-                            rsp_data  = `ZX_BYTE(`DCACHE_MAX_ACC_SIZE, rsp_data[`BYTE_RANGE]);
+                        begin
+                            req_offset  = req_info.addr[`DCACHE_OFFSET_ADDR_RANGE];
+                            rsp_data    = `ZX_BYTE(`DCACHE_MAX_ACC_SIZE,dCache_data[req_target_pos][`GET_LOWER_BOUND(`BYTE_BITS,req_offset)+:`BYTE_BITS]);
+                        end
                         else
-                            rsp_data  = `ZX_DWORD(`DCACHE_MAX_ACC_SIZE, rsp_data[`DWORD_RANGE]);
+                        begin
+                            req_offset  = req_info.addr[`DCACHE_OFFSET_ADDR_RANGE] >> $clog2(req_info.size+1);
+                            rsp_data  = `ZX_DWORD(`DCACHE_MAX_ACC_SIZE, dCache_data[req_target_pos][`GET_LOWER_BOUND(`DWORD_BITS,req_offset)+:`DWORD_BITS]);
+                        end
 
                         rsp_valid = 1'b1;
                     end
@@ -263,15 +283,15 @@ begin
                         dcache_state        = write_cache_line;
                     end
                 end
-                // If we do NOT hit on the D$ Tags (miss)
+                // If we do NOT hit on the D$ Tags (miss either LD or ST)
                 else
                 begin
                     dcache_ready_next   = 1'b0;
 
                     // If there is a request on the store buffer that targets
-                    // the line we want to replace, we need to perform the ST
+                    // the way we want to replace, we need to perform the ST
                     // and then evict the line
-                    if (store_buffer_hit_line)
+                    if (store_buffer_hit_way)
                     begin
                         pending_req         = req_info;
                         dcache_state        = write_cache_line;
@@ -280,11 +300,7 @@ begin
                     // the line we want to replace. Then, we can evict the line 
                     else 
                     begin
-                        // We select the victim to be evicted following LRU
-                        // algorithm
-                        req_target_pos = miss_dcache_way + req_set*`DCACHE_WAYS_PER_SET;
-
-                        // If the line is dirty on the cache we have to evict
+                        // If the data is dirty on the cache we have to evict
                         if ( dCache_dirty_ff[req_target_pos] )
                         begin
                             `ifdef VERBOSE_DCACHE
@@ -324,7 +340,7 @@ begin
                             pending_req             = req_info;                    
                             dcache_state            = bring_line;
                         end //!dCache_dirty_ff[req_target_pos]
-                    end // store_buffer_hit_line
+                    end // store_buffer_hit_way
                 end // !LD_hit
             end // req_valid
             else
@@ -334,7 +350,6 @@ begin
                 // Compute the tag and set for the given address 
                 req_tag     = store_buffer_pop_info.addr[`DCACHE_TAG_ADDR_RANGE];
                 req_set     = store_buffer_pop_info.addr[`DCACHE_SET_ADDR_RANGE]; 
-                req_offset  = store_buffer_pop_info.addr[`DCACHE_OFFSET_ADDR_RANGE];
                 req_size    = store_buffer_pop_info.size;
 
                 req_target_pos  = store_buffer_pop_info.way + req_set*`DCACHE_WAYS_PER_SET;
@@ -346,12 +361,16 @@ begin
                     dCache_dirty[req_target_pos] = 1'b1; 
            
                     if ( req_size == Byte)
+                    begin
+                        req_offset  = store_buffer_pop_info.addr[`DCACHE_OFFSET_ADDR_RANGE];
                         dCache_data[req_target_pos][`GET_LOWER_BOUND(`BYTE_BITS,req_offset)+:`BYTE_BITS] = store_buffer_pop_info.data[`BYTE_RANGE];
+                    end
                     else
+                    begin
+                        req_offset  = store_buffer_pop_info.addr[`DCACHE_OFFSET_ADDR_RANGE] >> $clog2(store_buffer_pop_info.size+1);
                         dCache_data[req_target_pos][`GET_LOWER_BOUND(`DWORD_BITS,req_offset)+:`DWORD_BITS] = store_buffer_pop_info.data[`DWORD_RANGE];
+                    end
                 end
-                //dCache_data[req_target_pos][`GET_UPPER_BOUND(req_size,req_offset):`GET_LOWER_BOUND(req_size,req_offset)] = store_buffer_pop_info.data[(req_size+1)*8-1:0];
-                //dCache_data[req_target_pos][(req_size+1)*8*req_offset+:(req_size+1)*8]  = store_buffer_pop_info.data[(req_size+1)*8-1:0]; 
             end
         end
 
@@ -388,7 +407,6 @@ begin
             begin
 
                 // Compute signals from the pending ST request
-                req_offset = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE]  >> $clog2(pending_req_ff.size+1);
                 req_tag    = pending_req_ff.addr[`DCACHE_TAG_ADDR_RANGE];
                 req_set    = pending_req_ff.addr[`DCACHE_SET_ADDR_RANGE]; 
                 req_size   = pending_req_ff.size;
@@ -398,9 +416,15 @@ begin
                 begin
                     dCache_data[req_target_pos_ff]  = rsp_data_miss; 
                     if ( req_size == Byte)
+                    begin
+                        req_offset = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE];
                         dCache_data[req_target_pos_ff][`GET_LOWER_BOUND(`BYTE_BITS,req_offset)+:`BYTE_BITS] =  pending_req_ff.data[`BYTE_RANGE];
+                    end
                     else
+                    begin
+                        req_offset = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE]  >> $clog2(pending_req_ff.size+1);
                         dCache_data[req_target_pos_ff][`GET_LOWER_BOUND(`DWORD_BITS,req_offset)+:`DWORD_BITS] =  pending_req_ff.data[`DWORD_RANGE];
+                    end
                 end
                 // If it was a LD, we copy the line received from memory and
                 // return valid data
@@ -410,11 +434,16 @@ begin
 
                     // Respond request from dcache_top
                     rsp_valid = 1'b1;
-                    rsp_data  = rsp_data_miss >> ((req_size+1)*`BYTE_BITS*req_offset) ;
                     if ( req_size == Byte)
-                                rsp_data  = `ZX_BYTE(`DCACHE_MAX_ACC_SIZE, rsp_data[`BYTE_RANGE]);
+                    begin
+                        req_offset = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE];
+                        rsp_data  = `ZX_BYTE(`DCACHE_MAX_ACC_SIZE,rsp_data_miss[`GET_LOWER_BOUND(`BYTE_BITS,req_offset)+:`BYTE_BITS]);
+                    end
                     else
-                        rsp_data  = `ZX_DWORD(`DCACHE_MAX_ACC_SIZE, rsp_data[`DWORD_RANGE]);
+                    begin
+                        req_offset = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE]  >> $clog2(pending_req_ff.size+1);
+                        rsp_data  = `ZX_DWORD(`DCACHE_MAX_ACC_SIZE, rsp_data_miss[`GET_LOWER_BOUND(`DWORD_BITS,req_offset)+:`DWORD_BITS]);
+                    end
                 end
 
                 dCache_tag[req_target_pos_ff]   = req_tag;
@@ -439,10 +468,9 @@ begin
             dcache_ready_next = 1'b0;
             // If there is a pending ST req. on the store buffer. Then, we should modify
             // the line before responding the LD or evicting the line
-            if (store_buffer_hit_tag_ff | store_buffer_hit_line_ff)
+            if (store_buffer_hit_tag_ff | store_buffer_hit_way_ff)
             begin
                 // Compute signals from the pending ST request
-                req_offset = pending_store_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE] >> $clog2(pending_req_ff.size+1);
                 req_tag    = pending_store_req_ff.addr[`DCACHE_TAG_ADDR_RANGE];
                 req_size   = pending_store_req_ff.size;
 
@@ -450,6 +478,17 @@ begin
                 dCache_tag[req_target_pos_ff]   =  req_tag;
                 dCache_dirty[req_target_pos_ff] = 1'b1; 
                 dCache_valid[req_target_pos_ff] = 1'b1;
+
+                if ( req_size == Byte)
+                begin
+                    req_offset = pending_store_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE];
+                    dCache_data[req_target_pos_ff][`GET_LOWER_BOUND(`BYTE_BITS,req_offset)+:`BYTE_BITS] = pending_store_req_ff.data[`BYTE_RANGE];
+                end
+                else
+                begin
+                    req_offset = pending_store_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE] >> $clog2(pending_req_ff.size+1);
+                    dCache_data[req_target_pos_ff][`GET_LOWER_BOUND(`DWORD_BITS,req_offset)+:`DWORD_BITS] = pending_store_req_ff.data[`DWORD_RANGE];
+                end
 
                 `ifdef VERBOSE_WRITE_CACHE_LINE
                     $display("[WRITE CACHE LINE]");
@@ -460,19 +499,12 @@ begin
                     $display("                   dCache_data[req_target_pos_ff] = %h",dCache_data[req_target_pos_ff] );
                 `endif
 
-                if ( req_size == Byte)
-                    dCache_data[req_target_pos_ff][`GET_LOWER_BOUND(`BYTE_BITS,req_offset)+:`BYTE_BITS] = pending_store_req_ff.data[`BYTE_RANGE];
-                else
-                begin
-                    dCache_data[req_target_pos_ff][`GET_LOWER_BOUND(`DWORD_BITS,req_offset)+:`DWORD_BITS] = pending_store_req_ff.data[`DWORD_RANGE];
-                end
-
                 // Check if there are more ST that affect the line on the store buffer.
                 // If there is another ST that affects the same line or TAG, we perform
                 // the write request
                 search_store_buffer = 1'b1;
-                search_addr         = pending_req_ff.addr;
-                if (store_buffer_hit_tag | store_buffer_hit_line)
+                search_tag         = pending_req_ff.addr[`DCACHE_TAG_ADDR_RANGE];
+                if (store_buffer_hit_tag | store_buffer_hit_way)
                 begin
                     dcache_state        = write_cache_line;
                 end
@@ -483,17 +515,22 @@ begin
                     if ( store_buffer_hit_tag_ff)
                     begin
                         req_size    = pending_req_ff.size;
-                        req_offset  = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE] >> $clog2(pending_req_ff.size+1);
                        
                         // If it was a LD request we return the data 
                         if (!pending_req_ff.is_store)
                         begin
-                            rsp_data  = dCache_data[req_target_pos_ff] >> ((req_size+1)*`BYTE_BITS*req_offset) ;
-
                             if ( req_size == Byte)
+                            begin
+                                req_offset  = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE];
+                                rsp_data  = dCache_data[req_target_pos_ff] >> ((req_size+1)*`BYTE_BITS*req_offset) ;
                                 rsp_data  = `ZX_BYTE(`DCACHE_MAX_ACC_SIZE, rsp_data[`BYTE_RANGE]);
+                            end
                             else
+                            begin
+                                req_offset  = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE] >> $clog2(pending_req_ff.size+1);
+                                rsp_data  = dCache_data[req_target_pos_ff] >> ((req_size+1)*`BYTE_BITS*req_offset) ;
                                 rsp_data  = `ZX_DWORD(`DCACHE_MAX_ACC_SIZE, rsp_data[`DWORD_RANGE]);
+                            end
 
                             rsp_valid = 1'b1;
                         end
@@ -533,7 +570,7 @@ logic [`DCACHE_WAYS_PER_SET_RANGE] update_way;
 logic update_dcache_lru;
 
 assign update_dcache_lru = dcache_tags_hit | 
-                           ( (dcache_state == bring_line) & rsp_valid_miss);
+                           ( (dcache_state_ff == bring_line) & rsp_valid_miss);
 
 assign update_set = req_set ;
 
@@ -589,9 +626,10 @@ store_buffer
 
     // Look for hit on store buffer
     .search_valid       ( search_store_buffer   ), 
-    .search_addr        ( search_addr           ),
+    .search_tag         ( search_tag            ), 
+    .search_way         ( miss_dcache_way       ), 
     .search_rsp_hit_tag ( store_buffer_hit_tag  ),
-    .search_rsp_hit_line( store_buffer_hit_line ),
+    .search_rsp_hit_way ( store_buffer_hit_way  ),
     .search_rsp         ( pending_store_req     )
 );
 
