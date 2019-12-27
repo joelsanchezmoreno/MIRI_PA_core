@@ -178,7 +178,7 @@ begin
                 mem_req_count   = '0;
 
                 // Reset control signal
-                dcache_req_valid_next   = 1'b0;
+                dcache_req_valid_next   = dcache_req_valid_miss;
             end
         end
     end
@@ -211,7 +211,7 @@ begin
                 // Reset control signal
                 wait_rsp_icache_next    = 1'b0;
                 wait_icache_rsp_update  = 1'b1; 
-                icache_req_valid_next   = 1'b0;
+                icache_req_valid_next   = icache_req_valid_miss;
             end
         end
     end
@@ -267,7 +267,14 @@ begin
     end
 end
 
-`ifdef VERBOSE_CORETB       
+`ifdef VERBOSE_CORETB 
+integer out_file,iter_out;  
+
+initial
+begin
+    out_file = $fopen("data_output_file.hex","w");  
+end
+
 always_ff @(posedge clk_i) 
 begin
     // If there is a request from the D$ and we are not busy sending the
@@ -292,7 +299,16 @@ begin
     end
 
     if ( rsp_mm_data == '1 & rsp_mm_valid)
+    begin
+        $display("[CORE TB] Finishing simulation, we found all NOPs on memory");
+
+        //FIXME: REVIEW
+        for (iter_out = 0; iter_out < `MAIN_MEMORY_DEPTH; iter_out++)
+            $fwrite(out_file,"%h\n", main_memory[iter_out]);
+        $fclose(out_file);
+
         $finish;
+    end
 end
 `endif
 
