@@ -173,6 +173,8 @@ decode_top
     .stall_decode       ( alu_busy   | 
                           !dcache_ready         ),
 
+    .flush_decode       ( take_branch           ),
+
     // Exceptions
     .xcpt_fetch_in      ( xcpt_fetch_to_decode  ),
     .xcpt_fetch_out     ( xcpt_fetch_to_alu     ),

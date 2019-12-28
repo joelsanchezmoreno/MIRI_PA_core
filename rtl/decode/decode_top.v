@@ -8,6 +8,8 @@ module decode_top
 
     // Stall pipeline
     input   logic                           stall_decode,
+    input   logic                           flush_decode,
+
     // Exceptions. WB takes care of managing exceptions and priorities
     input   fetch_xcpt_t                    xcpt_fetch_in,
     output  fetch_xcpt_t                    xcpt_fetch_out,
@@ -45,9 +47,9 @@ decode_xcpt_t   decode_xcpt_next;
 decode_xcpt_t   decode_xcpt_ff;
 fetch_xcpt_t    xcpt_fetch_ff;
 
-//         CLK    RST    EN             DOUT            DIN               DEF
-`RST_EN_FF(clock, reset, !stall_decode, decode_xcpt_ff, decode_xcpt_next, '0)
-`RST_EN_FF(clock, reset, !stall_decode, xcpt_fetch_ff,  xcpt_fetch_in,    '0)
+//         CLK    RST    EN                            DOUT            DIN               DEF
+`RST_EN_FF(clock, reset, !stall_decode | flush_decode, decode_xcpt_ff, decode_xcpt_next, '0)
+`RST_EN_FF(clock, reset, !stall_decode | flush_decode, xcpt_fetch_ff,  xcpt_fetch_in,    '0)
 
 assign decode_xcpt      = (stall_decode) ? decode_xcpt    : decode_xcpt_ff;
 assign xcpt_fetch_out   = (stall_decode) ? xcpt_fetch_out : xcpt_fetch_ff;
@@ -60,20 +62,21 @@ alu_request_t           req_to_alu_info_next;
 alu_request_t           req_to_alu_info_ff;
 logic [`PC_WIDTH-1:0]   req_to_alu_pc_ff;
 
-//         CLK    RST    EN             DOUT                 DIN                    DEF
-`RST_EN_FF(clock, reset, !stall_decode, req_to_alu_valid_ff, req_to_alu_valid_next, '0)
+//         CLK    RST    EN                            DOUT                 DIN                    DEF
+`RST_EN_FF(clock, reset, !stall_decode | flush_decode, req_to_alu_valid_ff, req_to_alu_valid_next, '0)
 
 //     CLK    EN            DOUT                DIN                  
 `EN_FF(clock, !stall_decode, req_to_alu_info_ff, req_to_alu_info_next)
 `EN_FF(clock, !stall_decode, req_to_alu_pc_ff,   fetch_instr_pc      )
 
 
-assign req_to_alu_valid_next = ( fetch_instr_valid ) ? 1'b1 : // New instruction from fetch
+assign req_to_alu_valid_next =  ( flush_decode      ) ? 1'b0 : // Invalidate instruction
+                                ( fetch_instr_valid ) ? 1'b1 : // New instruction from fetch
                                                        1'b0;
 
-assign req_to_alu_valid = (stall_decode) ? 1'b0             : req_to_alu_valid_ff;
-assign req_to_alu_info  = (stall_decode) ? req_to_alu_info  : req_to_alu_info_ff;
-assign req_to_alu_pc    = (stall_decode) ? req_to_alu_pc    : req_to_alu_pc_ff;
+assign req_to_alu_valid = (stall_decode | flush_decode) ? 1'b0            : req_to_alu_valid_ff;
+assign req_to_alu_info  = (stall_decode | flush_decode) ? req_to_alu_info : req_to_alu_info_ff;
+assign req_to_alu_pc    = (stall_decode | flush_decode) ? req_to_alu_pc   : req_to_alu_pc_ff;
 
 
 /////////////////////////////////////////
@@ -154,11 +157,11 @@ begin
     
     //FIXME: [Optional] Need to add MOV, TLBWRITE and IRET decoding
     // B-format
-    if (  fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]  == `INSTR_BEQ_OPCODE 
+    if (  is_branch_type_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]) 
         | fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]  == `INSTR_JUMP_OPCODE)  
     begin
     
-        if ( fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE] == `INSTR_BEQ_OPCODE) // BEQ CASE
+        if ( is_branch_type_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]))// BEQ,BNE, BLT, BGT, BLE, BGE CASE
         begin
             req_to_alu_info_next.offset = `ZX(`ALU_OFFSET_WIDTH, {fetch_instr_data[`INSTR_OFFSET_HI_ADDR_RANGE], 
                                                                   fetch_instr_data[`INSTR_OFFSET_LO_ADDR_RANGE]}); 
@@ -175,7 +178,7 @@ begin
         if (  is_r_type_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]) 
             & fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]  != `INSTR_NOP_OPCODE)
             // Raise an exception because the instruction is not supported
-            decode_xcpt_next.xcpt_illegal_instr = 1'b1;
+            decode_xcpt_next.xcpt_illegal_instr = !flush_decode;
     end
 end
 
