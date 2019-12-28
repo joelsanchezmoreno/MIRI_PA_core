@@ -114,7 +114,7 @@ assign write_rf_next =  !stall_pipeline &
                        &(   ((req_is_load | !req_info.is_store) & dcache_rsp_valid)  // M-type instruction this cycle or the last one with a hit
                           | (req_valid & int_instr )) ; // R-type instruction this cycle
 
-assign rsp_data_next = (req_is_load & dcache_rsp_valid) ? rsp_data_dcache :  // M-type instruction (LDB or LDW)
+assign rsp_data_next = ((req_is_load | !req_info.is_store ) & dcache_rsp_valid) ? rsp_data_dcache :  // M-type instruction (LDB or LDW)
                        req_info.data; // R-type instruction
 
 
