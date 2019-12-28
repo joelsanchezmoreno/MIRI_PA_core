@@ -29,6 +29,20 @@ function automatic is_m_type_instr;
     end
 endfunction
 
+function automatic is_branch_type_instr;
+    input logic [`INSTR_OPCODE_RANGE] opcode;
+    begin
+        is_branch_type_instr = 1'b0;
+        if ( (opcode == `INSTR_BEQ_OPCODE)
+            |(opcode == `INSTR_BNE_OPCODE)
+            |(opcode == `INSTR_BLT_OPCODE)
+            |(opcode == `INSTR_BGT_OPCODE)
+            |(opcode == `INSTR_BLE_OPCODE)
+            |(opcode == `INSTR_BGE_OPCODE))
+                is_branch_type_instr = 1'b1;
+    end
+endfunction
+
 function automatic is_load_instr;
     input logic [`INSTR_OPCODE_RANGE] opcode;
     begin
