@@ -45,7 +45,7 @@ module alu_top
 logic alu_hazard;
 
 logic   alu_busy_next;
-assign alu_hazard = stall_alu | alu_busy_next; 
+assign alu_hazard = stall_alu | alu_busy; 
 
 //////////////////////////////////////
 // Exceptions
@@ -108,8 +108,8 @@ logic [`REG_FILE_DATA_RANGE] alu_mul_data_ff;
 //         CLK   RST    EN          DOUT      DIN            DEF
 `RST_EN_FF(clock,reset, !stall_alu, alu_busy, alu_busy_next, 1'b0)
 
-//     CLK   EN                         DOUT             DIN
-`EN_FF(clock,!alu_busy & alu_busy_next, alu_mul_data_ff, alu_mul_data)
+//     CLK   EN                                                 DOUT             DIN
+`EN_FF(clock,(alu_busy & !alu_busy_next) | cache_data_bp_valid, alu_mul_data_ff, alu_mul_data)
 
 ////////////////////////////////////
 // Branch signals
@@ -148,144 +148,135 @@ begin
     ra_data = ((req_dst_reg == req_alu_info.ra_addr) & cache_data_bp_valid ) ? cache_data_bypass : req_alu_info.ra_data;
     rb_data = ((req_dst_reg == req_alu_info.rb_addr) & cache_data_bp_valid ) ? cache_data_bypass : req_alu_info.rb_data;
 
-    // We assign computed MUL data to request for D$ stage once we took into
-    // account the fixed latency for this operation
-    if (!alu_busy_next & alu_busy)
+    // ADD
+	if (req_alu_info.opcode == `INSTR_ADD_OPCODE)
+	begin
+		req_dcache_info_next.data  = ra_data + rb_data;
+	end
+    // SUB
+	else if (req_alu_info.opcode == `INSTR_SUB_OPCODE)
     begin
-        req_dcache_info_next.data = alu_mul_data_ff;
+        req_dcache_info_next.data  = ra_data - rb_data;
     end
-    else
+    // MUL
+	else if (req_alu_info.opcode == `INSTR_MUL_OPCODE)
     begin
-        // ADD
-	    if (req_alu_info.opcode == `INSTR_ADD_OPCODE)
-	    begin
-	    	req_dcache_info_next.data  = ra_data + rb_data;
-	    end
-        // SUB
-	    else if (req_alu_info.opcode == `INSTR_SUB_OPCODE)
-        begin
-            req_dcache_info_next.data  = ra_data - rb_data;
-        end
-        // MUL
-	    else if (req_alu_info.opcode == `INSTR_MUL_OPCODE)
-        begin
-            alu_mul_data = ra_data * rb_data;
-        end
-        //ADDI
-        else if (req_alu_info.opcode == `INSTR_ADDI_OPCODE)
-        begin
-            req_dcache_info_next.data = ra_data + req_alu_info.offset;
-        end
-        // MEM
-	    else if (is_m_type_instr(req_alu_info.opcode)) 
-        begin
-            //LD
-            if (is_load_instr(req_alu_info.opcode))
-                req_dcache_info_next.addr = (  req_dst_reg == req_alu_info.ra_addr
-                                             & cache_data_bp_valid              ) ? cache_data_bypass    + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) : // Bypass Cache to Cache_next
-                                                                                    req_alu_info.ra_data + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) ;
-            //ST
-            else
-                req_dcache_info_next.addr = (  req_dst_reg == req_alu_info.rd_addr
-                                             & cache_data_bp_valid)               ? cache_data_bypass    + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) : // Bypass Cache to Cache_next
-                                                                                    req_alu_info.rb_data + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) ;
+        req_dcache_info_next = ra_data * rb_data;
+    end
+    //ADDI
+    else if (req_alu_info.opcode == `INSTR_ADDI_OPCODE)
+    begin
+        req_dcache_info_next.data = ra_data + req_alu_info.offset;
+    end
+    // MEM
+	else if (is_m_type_instr(req_alu_info.opcode)) 
+    begin
+        //LD
+        if (is_load_instr(req_alu_info.opcode))
+            req_dcache_info_next.addr = (  req_dst_reg == req_alu_info.ra_addr
+                                         & cache_data_bp_valid              ) ? cache_data_bypass    + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) : // Bypass Cache to Cache_next
+                                                                                req_alu_info.ra_data + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) ;
+        //ST
+        else
+            req_dcache_info_next.addr = (  req_dst_reg == req_alu_info.rd_addr
+                                         & cache_data_bp_valid)               ? cache_data_bypass    + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) : // Bypass Cache to Cache_next
+                                                                                req_alu_info.rb_data + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) ;
 
-            // Used only on store requests
-	    	req_dcache_info_next.data   = (  cache_req_is_load & cache_data_bp_valid
-                                           & (req_dst_reg == req_alu_info.ra_addr))? cache_data_bypass : // Bypass Cache to Cache_next
-                                                                                     req_alu_info.ra_data;
-            
-            // Specify LD or ST for dcache request
-            if (req_alu_info.opcode == `INSTR_LDB_OPCODE | req_alu_info.opcode == `INSTR_LDW_OPCODE)
-                req_dcache_info_next.is_store = 1'b0;
-            else
-                req_dcache_info_next.is_store = 1'b1;
+        // Used only on store requests
+		req_dcache_info_next.data   = (  cache_req_is_load & cache_data_bp_valid
+                                       & (req_dst_reg == req_alu_info.ra_addr))? cache_data_bypass : // Bypass Cache to Cache_next
+                                                                                 req_alu_info.ra_data;
+        
+        // Specify LD or ST for dcache request
+        if (req_alu_info.opcode == `INSTR_LDB_OPCODE | req_alu_info.opcode == `INSTR_LDW_OPCODE)
+            req_dcache_info_next.is_store = 1'b0;
+        else
+            req_dcache_info_next.is_store = 1'b1;
 
-            // Specify size for dcache request
-            if (req_alu_info.opcode == `INSTR_LDB_OPCODE | req_alu_info.opcode == `INSTR_STB_OPCODE)
-                req_dcache_info_next.size = Byte;
-            else
-                req_dcache_info_next.size = Word;
-        end	
-        // BEQ
-	    else if (req_alu_info.opcode == `INSTR_BEQ_OPCODE) 
-	    begin
-            if (ra_data == rb_data)
-            begin
-                branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
-	    	    take_branch_next = req_alu_valid;
-            end
-	    end
-        // BNQ
-	    else if (req_alu_info.opcode == `INSTR_BNE_OPCODE) 
-	    begin
-            if (ra_data != rb_data)
-            begin
-                branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
-	    	    take_branch_next = req_alu_valid;
-            end
-	    end
-        // BLT
-	    else if (req_alu_info.opcode == `INSTR_BLT_OPCODE) 
-	    begin
-            if (ra_data < rb_data)
-            begin
-                branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
-	    	    take_branch_next = req_alu_valid;
-            end
-	    end
-        // BGT
-	    else if (req_alu_info.opcode == `INSTR_BGT_OPCODE) 
-	    begin
-            if (ra_data > rb_data)
-            begin
-                branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
-	    	    take_branch_next = req_alu_valid;
-            end
-	    end
-        // BLE
-	    else if (req_alu_info.opcode == `INSTR_BLE_OPCODE) 
-	    begin
-            if (ra_data <= rb_data)
-            begin
-                branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
-	    	    take_branch_next = req_alu_valid;
-            end
-	    end
-        // BGE
-	    else if (req_alu_info.opcode == `INSTR_BGE_OPCODE) 
-	    begin
-            if (ra_data >= rb_data)
-            begin
-                branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
-	    	    take_branch_next = req_alu_valid;
-            end
-	    end
-       // JUMP
-        else if (req_alu_info.opcode == `INSTR_JUMP_OPCODE) 
-	    begin
-	    	branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
-	    	take_branch_next = req_alu_valid;
-	    end
+        // Specify size for dcache request
+        if (req_alu_info.opcode == `INSTR_LDB_OPCODE | req_alu_info.opcode == `INSTR_STB_OPCODE)
+            req_dcache_info_next.size = Byte;
+        else
+            req_dcache_info_next.size = Word;
+    end	
+    // BEQ
+	else if (req_alu_info.opcode == `INSTR_BEQ_OPCODE) 
+	begin
+        if (ra_data == rb_data)
+        begin
+            branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
+		    take_branch_next = req_alu_valid;
+        end
+	end
+    // BNQ
+	else if (req_alu_info.opcode == `INSTR_BNE_OPCODE) 
+	begin
+        if (ra_data != rb_data)
+        begin
+            branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
+		    take_branch_next = req_alu_valid;
+        end
+	end
+    // BLT
+	else if (req_alu_info.opcode == `INSTR_BLT_OPCODE) 
+	begin
+        if (ra_data < rb_data)
+        begin
+            branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
+		    take_branch_next = req_alu_valid;
+        end
+	end
+    // BGT
+	else if (req_alu_info.opcode == `INSTR_BGT_OPCODE) 
+	begin
+        if (ra_data > rb_data)
+        begin
+            branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
+		    take_branch_next = req_alu_valid;
+        end
+	end
+    // BLE
+	else if (req_alu_info.opcode == `INSTR_BLE_OPCODE) 
+	begin
+        if (ra_data <= rb_data)
+        begin
+            branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
+		    take_branch_next = req_alu_valid;
+        end
+	end
+    // BGE
+	else if (req_alu_info.opcode == `INSTR_BGE_OPCODE) 
+	begin
+        if (ra_data >= rb_data)
+        begin
+            branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
+		    take_branch_next = req_alu_valid;
+        end
+	end
+    // JUMP
+    else if (req_alu_info.opcode == `INSTR_JUMP_OPCODE) 
+	begin
+		branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
+		take_branch_next = req_alu_valid;
+	end
 
-        /* FIXME: Optional not supported
-        // MOV
-        else if (req_alu_info.opcode == `INSTR_MOV_OPCODE) 
-        begin
-            //TODO          
-        end
-        // TLBWRITE
-	    else if (req_alu_info.opcode == `INSTR_TLBWRITE_OPCODE) 
-        begin
-            //TODO          
-        end
-        // IRET
-	    else if (req_alu_info.opcode == `INSTR_IRET_OPCODE) 
-        begin
-            //TODO
-        end
-        */
-   end
+    /* FIXME: Optional not supported
+    // MOV
+    else if (req_alu_info.opcode == `INSTR_MOV_OPCODE) 
+    begin
+        //TODO          
+    end
+    // TLBWRITE
+	else if (req_alu_info.opcode == `INSTR_TLBWRITE_OPCODE) 
+    begin
+        //TODO          
+    end
+    // IRET
+	else if (req_alu_info.opcode == `INSTR_IRET_OPCODE) 
+    begin
+        //TODO
+    end
+    */
 end
 
 ////////////////////////////////////
@@ -298,7 +289,7 @@ logic [`ALU_MUL_LATENCY_RANGE] mul_count;
 
 always_comb
 begin
-    alu_busy_next   = 1'b0;
+    alu_busy_next   = alu_busy;
     mul_count_next  = mul_count;
 
     // If we receive a MUL request we are going to put ALU in busy stage to
