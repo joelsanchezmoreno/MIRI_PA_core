@@ -213,14 +213,59 @@ begin
             if (ra_data == rb_data)
             begin
                 branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
-	    	    take_branch_next = 1'b1;
+	    	    take_branch_next = req_alu_valid;
             end
 	    end
-        // JUMP
+        // BNQ
+	    else if (req_alu_info.opcode == `INSTR_BNE_OPCODE) 
+	    begin
+            if (ra_data != rb_data)
+            begin
+                branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
+	    	    take_branch_next = req_alu_valid;
+            end
+	    end
+        // BLT
+	    else if (req_alu_info.opcode == `INSTR_BLT_OPCODE) 
+	    begin
+            if (ra_data < rb_data)
+            begin
+                branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
+	    	    take_branch_next = req_alu_valid;
+            end
+	    end
+        // BGT
+	    else if (req_alu_info.opcode == `INSTR_BGT_OPCODE) 
+	    begin
+            if (ra_data > rb_data)
+            begin
+                branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
+	    	    take_branch_next = req_alu_valid;
+            end
+	    end
+        // BLE
+	    else if (req_alu_info.opcode == `INSTR_BLE_OPCODE) 
+	    begin
+            if (ra_data <= rb_data)
+            begin
+                branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
+	    	    take_branch_next = req_alu_valid;
+            end
+	    end
+        // BGE
+	    else if (req_alu_info.opcode == `INSTR_BGE_OPCODE) 
+	    begin
+            if (ra_data >= rb_data)
+            begin
+                branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
+	    	    take_branch_next = req_alu_valid;
+            end
+	    end
+       // JUMP
         else if (req_alu_info.opcode == `INSTR_JUMP_OPCODE) 
 	    begin
 	    	branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
-	    	take_branch_next = 1'b1;
+	    	take_branch_next = req_alu_valid;
 	    end
 
         /* FIXME: Optional not supported
