@@ -47,6 +47,25 @@ logic [`INSTR_WIDTH-1:0]                decode_instr_data_next;
 assign xcpt_fetch = '0; //FIXME: connect to iTLB
 
 /////////////////////////////////////////
+// Branches
+logic                   take_branch_ff;
+logic                   take_branch_update;
+logic                   branch_executed;
+logic   [`PC_WIDTH-1:0] branch_pc_ff;
+
+//         CLK    RST    EN                  DOUT             DIN          DEF
+`RST_EN_FF(clock, reset, take_branch_update, take_branch_ff, take_branch, 1'b0)
+
+//     CLK    EN                  DOUT          DIN
+`EN_FF(clock, take_branch_update, branch_pc_ff, branch_pc)
+
+assign branch_executed    = (take_branch | take_branch_ff) & icache_ready;
+
+assign take_branch_update = (!take_branch_ff & take_branch) ? 1'b1 : // branch request received
+                            (branch_executed)               ? 1'b1 : // new PC has been requested and updated
+                                                              1'b0 ;
+
+/////////////////////////////////////////
 // Program counter
 logic   [`PC_WIDTH-1:0] program_counter;
 logic   [`PC_WIDTH-1:0] program_counter_next;
@@ -56,8 +75,10 @@ logic                   program_counter_update;
 `RST_EN_FF(clock, reset, program_counter_update, program_counter, program_counter_next, boot_addr)
 
 assign program_counter_update   = ( stall_fetch | !icache_ready | !icache_rsp_valid) ? 1'b0 : 1'b1;
-assign program_counter_next     = ( take_branch ) ? branch_pc : 
-                                                    program_counter + 4;
+assign program_counter_next     = ( take_branch     & icache_ready ) ? branch_pc    : 
+                                  ( take_branch_ff  & icache_ready ) ? branch_pc_ff :
+                                                                       program_counter + 4;
+
 
 /////////////////////////////////////////                                                
 // Request to the Instruction Cache
@@ -99,20 +120,23 @@ assign icache_req_valid = (stall_fetch) ? 1'b0 :
 // In case of stall we mantain the value of the instr to be decoded because
 // decode stage may need it to relaunch the instruction
 logic                               decode_instr_valid_ff;
+logic                               decode_instr_valid_next;
 logic   [`INSTR_WIDTH-1:0]          decode_instr_data_ff;
 logic   [`PC_WIDTH-1:0]             decode_instr_pc_ff;
 
-//         CLK    RST     EN           DOUT                   DIN               DEF
-`RST_EN_FF(clock, reset, !stall_fetch, decode_instr_valid_ff, icache_rsp_valid, 1'b0)
+assign decode_instr_valid_next = !take_branch & !take_branch_ff & icache_rsp_valid;
+
+//         CLK    RST     EN           DOUT                   DIN                      DEF
+`RST_EN_FF(clock, reset, !stall_fetch, decode_instr_valid_ff, decode_instr_valid_next, 1'b0)
 
 
 //     CLK    EN            DOUT                   DIN                   
 `EN_FF(clock, !stall_fetch, decode_instr_data_ff,  decode_instr_data_next)
 `EN_FF(clock, !stall_fetch, decode_instr_pc_ff,    program_counter)
 
-assign decode_instr_valid = (stall_fetch) ? 1'b0              : decode_instr_valid_ff;
-assign decode_instr_data  = (stall_fetch) ? decode_instr_data : decode_instr_data_ff; 
-assign decode_instr_pc    = (stall_fetch) ? decode_instr_pc   : decode_instr_pc_ff;
+assign decode_instr_valid = (stall_fetch | take_branch) ? 1'b0              : decode_instr_valid_ff;
+assign decode_instr_data  = (stall_fetch)               ? decode_instr_data : decode_instr_data_ff; 
+assign decode_instr_pc    = (stall_fetch)               ? decode_instr_pc   : decode_instr_pc_ff;
 
 always_comb
 begin
