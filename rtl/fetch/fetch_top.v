@@ -29,6 +29,7 @@ module fetch_top
 
     // Response from the memory hierarchy
     input   logic [`ICACHE_LINE_WIDTH-1:0]      rsp_data_miss,
+    input   logic                               rsp_bus_error,
     input   logic                               rsp_valid_miss
  );
 
@@ -42,9 +43,6 @@ logic [`ICACHE_LINE_WIDTH-1:0]          icache_rsp_data;
 logic [`ICACHE_INSTR_IN_LINE_WIDTH-1:0] word_in_line;
 logic [`INSTR_WIDTH-1:0]                decode_instr_data_next;
 
-/////////////////////////////////////////
-// Exceptions
-assign xcpt_fetch = '0; //FIXME: connect to iTLB
 
 /////////////////////////////////////////
 // Branches
@@ -79,6 +77,18 @@ assign program_counter_next     = ( take_branch     & icache_ready ) ? branch_pc
                                   ( take_branch_ff  & icache_ready ) ? branch_pc_ff :
                                                                        program_counter + 4;
 
+                                                  
+/////////////////////////////////////////
+// Exceptions
+logic xcpt_bus_error_aux;
+
+always_comb
+begin
+    xcpt_fetch.xcpt_itlb_miss   = '0; //FIXME: connect to iTLB
+    xcpt_fetch.xcpt_bus_error   = xcpt_bus_error_aux;
+    xcpt_fetch.xcpt_addr_val    = program_counter;
+    xcpt_fetch.xcpt_pc          = program_counter;
+end
 
 /////////////////////////////////////////                                                
 // Request to the Instruction Cache
@@ -152,6 +162,7 @@ icache(
     .clock              ( clock             ),
     .reset              ( reset             ),
     .icache_ready       ( icache_ready      ),
+    .xcpt_bus_error     ( xcpt_bus_error_aux),
     
     // Request from the core pipeline
     .req_valid          ( icache_req_valid  ),
@@ -167,6 +178,7 @@ icache(
                     
     // Response from the memory hierarchy
     .rsp_data_miss      ( rsp_data_miss     ),
+    .rsp_bus_error      ( rsp_bus_error     ),
     .rsp_valid_miss     ( rsp_valid_miss    )
 );
 

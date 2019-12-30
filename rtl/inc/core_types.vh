@@ -62,6 +62,52 @@ function automatic is_store_instr;
                 is_store_instr = 1'b1;
     end
 endfunction
+
+function automatic is_jump_instr;
+    input logic [`INSTR_OPCODE_RANGE] opcode;
+    begin
+        is_jump_instr = 1'b0;
+        if (opcode == `INSTR_JUMP_OPCODE)
+                is_jump_instr = 1'b1;
+    end
+endfunction
+
+function automatic is_mov_instr;
+    input logic [`INSTR_OPCODE_RANGE] opcode;
+    begin
+        is_mov_instr = 1'b0;
+        if (opcode == `INSTR_MOV_OPCODE)
+                is_mov_instr = 1'b1;
+    end
+endfunction
+
+function automatic is_nop_instr;
+    input logic [`INSTR_OPCODE_RANGE] opcode;
+    begin
+        is_nop_instr = 1'b0;
+        if (opcode == `INSTR_NOP_OPCODE)
+                is_nop_instr = 1'b1;
+    end
+endfunction
+
+function automatic is_tlb_instr;
+    input logic [`INSTR_OPCODE_RANGE] opcode;
+    begin
+        is_tlb_instr = 1'b0;
+        if (opcode == `INSTR_TLBWRITE_OPCODE)
+                is_tlb_instr = 1'b1;
+    end
+endfunction
+
+function automatic is_iret_instr;
+    input logic [`INSTR_OPCODE_RANGE] opcode;
+    begin
+        is_iret_instr = 1'b0;
+        if (opcode == `INSTR_IRET_OPCODE)
+                is_iret_instr = 1'b1;
+    end
+endfunction
+
 ////////////////////////////////////////////////////////////////////////////////
 // ENUMS
 ////////////////////////////////////////////////////////////////////////////////
@@ -127,23 +173,32 @@ typedef struct packed
 // Exceptions
 typedef struct packed 
 {
-    logic                   xcpt_fetch_itlb_miss;
-    logic [`PC_WIDTH_RANGE] xcpt_pc;
-} fetch_xcpt_t; //FIXME: add address of the miss???
+    logic                       xcpt_itlb_miss;
+    logic                       xcpt_bus_error;
+    logic [`ICACHE_ADDR_RANGE]  xcpt_addr_val;
+    logic [`PC_WIDTH_RANGE]     xcpt_pc;
+} fetch_xcpt_t; 
 
 typedef struct packed 
 {
     logic                   xcpt_illegal_instr;
     logic [`PC_WIDTH_RANGE] xcpt_pc;
-} decode_xcpt_t; //FIXME: add opcode ??
+} decode_xcpt_t; 
+
+typedef struct packed 
+{
+    logic                   xcpt_overflow;
+    logic [`PC_WIDTH_RANGE] xcpt_pc;
+} alu_xcpt_t; 
 
 typedef struct packed 
 {
     logic                       xcpt_addr_fault;
-    logic                       xcpt_fetch_dtlb_miss;
+    logic                       xcpt_bus_error;
+    logic                       xcpt_dtlb_miss;
     logic [`DCACHE_ADDR_RANGE]  xcpt_addr_val;
     logic [`PC_WIDTH_RANGE]     xcpt_pc;
-} cache_xcpt_t; //FIXME: add dTlb address???
+} cache_xcpt_t; 
 
 `endif // _CORE_TYPES_
 

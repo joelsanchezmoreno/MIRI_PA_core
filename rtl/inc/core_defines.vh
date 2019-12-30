@@ -39,7 +39,7 @@
 
 //////////////////////
 // Decode defines
-///////////////////////
+//////////////////////
 
 `define INSTR_OPCODE_ADDR_RANGE 31:25
 `define INSTR_DST_ADDR_RANGE    24:20
@@ -57,6 +57,10 @@
 `define INSTR_B_OFFSET_WIDTH 20
 `define INSTR_B_OFFSET_RANGE `INSTR_B_OFFSET_WIDTH-1:0
 
+//////////////////////
+// ALU defines
+///////////////////////
+
 `define ALU_OFFSET_WIDTH    `MAX(`INSTR_M_OFFSET_WIDTH, \
                                  `INSTR_B_OFFSET_WIDTH)
 
@@ -65,6 +69,12 @@
 `define ALU_MUL_LATENCY         5
 `define ALU_MUL_LATENCY_WIDTH   $clog2(`ALU_MUL_LATENCY)
 `define ALU_MUL_LATENCY_RANGE   `ALU_MUL_LATENCY_WIDTH-1:0
+
+// Overflow computation
+`define ALU_OVW_DATA_WIDTH      (`REG_FILE_DATA_WIDTH*2)
+`define ALU_OVW_DATA_RANGE      `ALU_OVW_DATA_WIDTH-1:0
+
+`define ALU_DATA_MSB            (`REG_FILE_DATA_WIDTH-1)
 
 ///////////////////////
 // OPCODES
@@ -98,6 +108,7 @@
 // Instruction cache defines
 ///////////////////////
 `define ICACHE_ADDR_WIDTH   `PC_WIDTH
+`define ICACHE_ADDR_RANGE   `ICACHE_ADDR_WIDTH-1:0
 `define ICACHE_LINE_WIDTH   `MAIN_MEMORY_LINE_WIDTH // data
 
 `define ICACHE_NUM_SET          2

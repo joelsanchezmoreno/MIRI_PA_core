@@ -7,18 +7,18 @@ module cache_top
     input   logic                               reset,
 
     // Send stall pipeline request
-    output  logic                               dcache_ready, 
+    output  logic                               dcache_ready,
+    input   logic                               flush_cache, 
 
     // Exception
     input   fetch_xcpt_t                        xcpt_fetch_in,
     output  fetch_xcpt_t                        xcpt_fetch_out,
     input   decode_xcpt_t                       xcpt_decode_in,
     output  decode_xcpt_t                       xcpt_decode_out,
+    input   alu_xcpt_t                          xcpt_alu_in,
+    output  alu_xcpt_t                          xcpt_alu_out,
     output  cache_xcpt_t                        xcpt_cache,
     
-    // Receive stall pipeline request
-    input   logic                               stall_pipeline,
-
     // Request from the ALU stage
     input   logic                               req_valid,
     input   dcache_request_t                    req_info,
@@ -43,37 +43,42 @@ module cache_top
 
     // Response from the memory hierarchy
     input   logic [`DCACHE_LINE_WIDTH-1:0]      rsp_data_miss,
+    input   logic                               rsp_bus_error,
     input   logic                               rsp_valid_miss
  );
 
 logic cache_hazard;
-assign cache_hazard = (!dcache_ready & !dcache_rsp_valid) | stall_pipeline;
+assign cache_hazard = (!dcache_ready & !dcache_rsp_valid);
 
 //////////////////////////////////////////////////
 // Exceptions
-decode_xcpt_t  xcpt_decode_ff; 
 fetch_xcpt_t   xcpt_fetch_ff;
+decode_xcpt_t  xcpt_decode_ff; 
+alu_xcpt_t     xcpt_alu_ff;
 
 cache_xcpt_t  xcpt_cache_next;
 cache_xcpt_t  xcpt_cache_ff;
-logic xcpt_addr_fault_aux;
+logic xcpt_bus_error_aux;
+logic xcpt_dtlb_miss_aux;
 
-
-//         CLK    RST    EN            DOUT            DIN             DEF
-`RST_EN_FF(clock, reset, !cache_hazard, xcpt_fetch_ff,  xcpt_fetch_in,  '0)
-`RST_EN_FF(clock, reset, !cache_hazard, xcpt_decode_ff, xcpt_decode_in, '0)
-`RST_EN_FF(clock, reset, !cache_hazard, xcpt_cache_ff,  xcpt_cache_next,'0)
+//         CLK    RST                  EN            DOUT            DIN             DEF
+`RST_EN_FF(clock, reset | flush_cache, !cache_hazard, xcpt_fetch_ff,  xcpt_fetch_in,  '0)
+`RST_EN_FF(clock, reset | flush_cache, !cache_hazard, xcpt_decode_ff, xcpt_decode_in, '0)
+`RST_EN_FF(clock, reset | flush_cache, !cache_hazard, xcpt_alu_ff,    xcpt_alu_in,    '0)
+`RST_EN_FF(clock, reset | flush_cache, !cache_hazard, xcpt_cache_ff,  xcpt_cache_next,'0)
 
 always_comb
 begin
-    xcpt_cache_next.xcpt_addr_fault = xcpt_addr_fault_aux;
-    xcpt_cache_next.xcpt_fetch_dtlb_miss = '0; //FIXME connect to tlb
-    xcpt_cache_next.xcpt_addr_val = req_info.addr;
-    xcpt_cache_next.xcpt_pc       = req_instr_pc;
+    xcpt_cache_next.xcpt_bus_error  = xcpt_bus_error_aux;
+    xcpt_cache_next.xcpt_dtlb_miss  = xcpt_dtlb_miss_aux; //FIXME connect to tlb
+    xcpt_cache_next.xcpt_addr_fault = 1'b0; //FIXME: We do not have different privilege modes
+    xcpt_cache_next.xcpt_addr_val   = req_info.addr;
+    xcpt_cache_next.xcpt_pc         = req_instr_pc;
 end
 
 assign xcpt_fetch_out   = (cache_hazard) ? xcpt_fetch_out  : xcpt_fetch_ff;
 assign xcpt_decode_out  = (cache_hazard) ? xcpt_decode_out : xcpt_decode_ff;
+assign xcpt_alu_out     = (cache_hazard) ? xcpt_alu_out    : xcpt_alu_ff;
 assign xcpt_cache       = (cache_hazard) ? xcpt_cache      : xcpt_cache_ff;
 
 //////////////////////////////////////////////////
@@ -90,8 +95,8 @@ logic [`DCACHE_MAX_ACC_SIZE-1:0] rsp_data_dcache;
 logic [`DCACHE_MAX_ACC_SIZE-1:0] rsp_data_next;
 logic [`DCACHE_MAX_ACC_SIZE-1:0] rsp_data_ff;
 
-//         CLK    RST    EN             DOUT         DIN            DEF
-`RST_EN_FF(clock, reset, !cache_hazard, write_rf_ff, write_rf_next, '0)
+//         CLK    RST    EN                           DOUT         DIN            DEF
+`RST_EN_FF(clock, reset, !cache_hazard | flush_cache, write_rf_ff, write_rf_next, '0)
 
 //     CLK    EN                                DOUT            DIN         
 `EN_FF(clock, !cache_hazard & mem_instr,        req_is_load_ff, !req_info.is_store)
@@ -100,19 +105,19 @@ logic [`DCACHE_MAX_ACC_SIZE-1:0] rsp_data_ff;
 `EN_FF(clock, !cache_hazard | dcache_rsp_valid, rsp_data_ff,    rsp_data_next     )
 
 
-assign write_rf     = (cache_hazard) ? 1'b0         : write_rf_ff;
-assign req_is_load  = (cache_hazard) ? req_is_load  : req_is_load_ff;
-assign dest_rf      = (cache_hazard) ? dest_rf      : dest_rf_ff;
-assign rsp_data     = (cache_hazard) ? rsp_data     : rsp_data_ff;
-assign wb_instr_pc  = (cache_hazard) ? wb_instr_pc  : wb_instr_pc_ff;
+assign write_rf     = (cache_hazard | flush_cache) ? 1'b0         : write_rf_ff;
+assign req_is_load  = (cache_hazard | flush_cache) ? req_is_load  : req_is_load_ff;
+assign dest_rf      = (cache_hazard | flush_cache) ? dest_rf      : dest_rf_ff;
+assign rsp_data     = (cache_hazard | flush_cache) ? rsp_data     : rsp_data_ff;
+assign wb_instr_pc  = (cache_hazard | flush_cache) ? wb_instr_pc  : wb_instr_pc_ff;
 
 // In case of LD request we will have to write that data on the RF.
 // In addition, we also check if the request is for an ALU R type 
 // instruction, which also writes on the RF.
 logic dcache_rsp_valid;
-assign write_rf_next =  !stall_pipeline &
-                       &(   ((req_is_load | !req_info.is_store) & dcache_rsp_valid)  // M-type instruction this cycle or the last one with a hit
-                          | (req_valid & int_instr )) ; // R-type instruction this cycle
+assign write_rf_next =  ( flush_cache ) ? 1'b0 :
+                                          (((req_is_load | !req_info.is_store) & dcache_rsp_valid)  // M-type instruction this cycle or the last one with a hit
+                                            |(req_valid & int_instr )) ; // R-type instruction this cycle
 
 assign rsp_data_next = ((req_is_load | !req_info.is_store ) & dcache_rsp_valid) ? rsp_data_dcache :  // M-type instruction (LDB or LDW)
                        req_info.data; // R-type instruction
@@ -121,10 +126,11 @@ assign rsp_data_next = ((req_is_load | !req_info.is_store ) & dcache_rsp_valid) 
 //////////////////////////////////////////////////
 // Data bypass
 
-assign data_bp_valid = ((req_is_load | !req_info.is_store) & dcache_rsp_valid) ? 1'b1 :
-                       (cache_hazard) ? data_bp_valid :
-                       (int_instr)    ? req_valid     : 
-                                        1'b0;
+assign data_bp_valid = ( flush_cache )                                          ? 1'b0 :
+                       ((req_is_load | !req_info.is_store) & dcache_rsp_valid)  ? 1'b1 :
+                       (cache_hazard)                                           ? data_bp_valid :
+                       (int_instr)                                              ? req_valid     : 
+                                                                                  1'b0;
 
                                                                
 assign data_bypass = (cache_hazard) ? data_bypass : 
@@ -135,7 +141,8 @@ assign data_bypass = (cache_hazard) ? data_bypass :
 //////////////////////////////////////////////////
 // Request to the Data Cache
 logic dcache_req_valid;
-assign dcache_req_valid = dcache_ready & req_valid & mem_instr;
+assign dcache_req_valid = ( flush_cache ) ? 1'b0 :
+                                            dcache_ready & req_valid & mem_instr;
 
 //////////////////////////////////////////////////
 // Data Cache instance
@@ -148,7 +155,7 @@ dcache
     .dcache_ready       ( dcache_ready      ),
 
     // Exception
-    .xcpt_address_fault ( xcpt_addr_fault_aux),
+    .xcpt_bus_error     ( xcpt_bus_error_aux),
     
     // Request from the core pipeline
     .req_valid          ( dcache_req_valid  ),
@@ -164,24 +171,10 @@ dcache
                     
     // Response from the memory hierarchy
     .rsp_data_miss      ( rsp_data_miss     ),
+    .rsp_bus_error      ( rsp_bus_error     ),
     .rsp_valid_miss     ( rsp_valid_miss    )
 );
-`ifdef VERBOSE_DECODE
-always_ff @(posedge clock)
-begin
-    if (write_rf)
-    begin
-        $display("[CACHE]  Request to WB for RF. PC = %h",wb_instr_pc);
-        $display("         dest_rf =  %h",dest_rf);
-        $display("         rsp_data =  %h",rsp_data);
-    end
-    if (data_bp_valid)
-    begin
-        $display("[CACHE]  Request to WB for RF. PC = %h",wb_instr_pc);
-        $display("         data_bypass =  %h",data_bypass);
-    end
-end
-`endif
+
 /*
 //FIXME: Create module
 data_tlb
@@ -208,5 +201,26 @@ itlb
     .rsp_valid_miss     (                   )
 );
 */
+
+//////////////////////////////////////////////////
+// VERBOSE
+
+`ifdef VERBOSE_DECODE
+always_ff @(posedge clock)
+begin
+    if (write_rf)
+    begin
+        $display("[CACHE]  Request to WB for RF. PC = %h",wb_instr_pc);
+        $display("         dest_rf =  %h",dest_rf);
+        $display("         rsp_data =  %h",rsp_data);
+    end
+    if (data_bp_valid)
+    begin
+        $display("[CACHE]  Request to WB for RF. PC = %h",wb_instr_pc);
+        $display("         data_bypass =  %h",data_bypass);
+    end
+end
+`endif
+
 endmodule
 

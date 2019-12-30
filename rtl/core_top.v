@@ -22,6 +22,7 @@ module core_top
 
     // Response from the memory hierarchy
     input   logic [`DCACHE_LINE_WIDTH-1:0]          rsp_data_miss,
+    input   logic                                   rsp_bus_error,
     input   logic                                   rsp_valid_miss,
     input   logic                                   rsp_cache_id // 0 for I$, 1 for D$
 );
@@ -66,18 +67,20 @@ logic                           req_to_dcache_int_inst;
 
 // Bypass signal
 logic [`REG_FILE_DATA_RANGE]    alu_data_bypass;
+logic                           alu_data_valid;
 
 // Branches signals
 
 // We take a branch on the fetch stage so we have to cancel 
 // the requests sent to decode stage and alu stage next cycle
 // and we have to fetch another instruction instead of pc+4
-logic                       take_branch; // from ALU to fetch  
-logic   [`PC_WIDTH-1:0]     branch_pc;
+logic                       alu_take_branch; // from ALU to fetch  
+logic   [`PC_WIDTH-1:0]     alu_branch_pc;
 
 // Exception signals
 fetch_xcpt_t                    xcpt_fetch_to_cache;
 decode_xcpt_t                   xcpt_decode_to_cache;
+alu_xcpt_t                      xcpt_alu_to_cache;
 
 /////////////////////////////////////////
 // Data cache signals to other stages
@@ -88,6 +91,7 @@ logic dcache_ready;
 fetch_xcpt_t                    xcpt_fetch_to_wb;
 decode_xcpt_t                   xcpt_decode_to_wb;
 cache_xcpt_t                    xcpt_cache_to_wb;
+alu_xcpt_t                      xcpt_alu_to_wb;
 
 // Program counter value
 logic [`PC_WIDTH_RANGE]             dcache_to_wb_pc;
@@ -118,6 +122,11 @@ logic [`REG_FILE_XCPT_ADDR_RANGE] 	wb_rmAddr;
 // instruction decoder.
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
+logic [`PC_WIDTH-1:0]  branch_pc;
+
+assign branch_pc = ( wb_xcpt_valid ) ? `CORE_XCPT_ADDRESS:
+                                       alu_branch_pc;
+
 fetch_top
 fetch_top
 (
@@ -131,7 +140,8 @@ fetch_top
     .xcpt_fetch         ( xcpt_fetch_to_decode  ),
 
     // Branches
-    .take_branch        ( take_branch           ), 
+    .take_branch        (  alu_take_branch
+                         | wb_xcpt_valid         ), 
     .branch_pc          ( branch_pc             ), 
 
     // Stop fetching instructions
@@ -149,6 +159,8 @@ fetch_top
 
     // Response from the memory hierarchy
     .rsp_data_miss      ( rsp_data_miss         ),
+    .rsp_bus_error      ( !rsp_cache_id &
+                          rsp_bus_error         ),
     .rsp_valid_miss     ( !rsp_cache_id & 
                            rsp_valid_miss       )
 );                
@@ -160,8 +172,6 @@ fetch_top
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
-//take_branch //FIXME: Take branch should introduce a NOP not stall decode
-    
 decode_top
 decode_top
 (
@@ -170,10 +180,11 @@ decode_top
     .reset              ( reset                 ),
 
     // Stall pipeline
-    .stall_decode       ( alu_busy   | 
-                          !dcache_ready         ),
+    .stall_decode       (  alu_busy
+                         | !dcache_ready        ),
 
-    .flush_decode       ( take_branch           ),
+    .flush_decode       (  alu_take_branch 
+                         | wb_xcpt_valid        ),
 
     // Exceptions
     .xcpt_fetch_in      ( xcpt_fetch_to_decode  ),
@@ -202,6 +213,7 @@ decode_top
 
     // Bypasses
     .alu_data_bypass    ( alu_data_bypass       ),
+    .alu_data_valid     ( alu_data_valid        ),
     .cache_data_bypass  ( dcache_data_bypass    ),
     .cache_data_valid   ( dcache_data_bp_valid  )
 );
@@ -222,12 +234,14 @@ alu_top
     // Stall pipeline
     .stall_alu          ( !dcache_ready             ),
     .alu_busy           ( alu_busy                  ),
+    .flush_alu          ( wb_xcpt_valid             ),
 
     // Exceptions
     .xcpt_fetch_in      ( xcpt_fetch_to_alu         ),
     .xcpt_fetch_out     ( xcpt_fetch_to_cache       ),
     .xcpt_decode_in     ( xcpt_decode_to_alu        ),
     .xcpt_decode_out    ( xcpt_decode_to_cache      ),
+    .xcpt_alu_out       ( xcpt_alu_to_cache         ),
 
     // Request from decode stage
     .req_alu_valid      ( req_to_alu_valid          ),
@@ -247,11 +261,12 @@ alu_top
     .req_dst_reg        ( load_dst_reg              ), 
 
     // Branch signals to fetch stage
-    .branch_pc          ( branch_pc                 ),
-    .take_branch        ( take_branch               ),
+    .branch_pc          ( alu_branch_pc             ),
+    .take_branch        ( alu_take_branch           ),
  
     //Bypass
     .alu_data_bypass    ( alu_data_bypass           ),
+    .alu_data_valid     ( alu_data_valid            ),
     .cache_data_bypass  ( dcache_data_bypass        ),
     .cache_data_bp_valid( dcache_data_bp_valid      )
 );
@@ -269,18 +284,18 @@ cache_top
     .clock          ( clock                 ),
     .reset          ( reset                 ),
 
-    // Send stall pipeline request
+    // Control signals
     .dcache_ready   ( dcache_ready          ), 
+    .flush_cache    ( wb_xcpt_valid         ),
 
-    //Exception
+    //Exceptions
     .xcpt_fetch_in   ( xcpt_fetch_to_cache  ),
     .xcpt_fetch_out  ( xcpt_fetch_to_wb     ),
     .xcpt_decode_in  ( xcpt_decode_to_cache ),
     .xcpt_decode_out ( xcpt_decode_to_wb    ),
+    .xcpt_alu_in     ( xcpt_alu_to_cache    ),
+    .xcpt_alu_out    ( xcpt_alu_to_wb       ),   
     .xcpt_cache      ( xcpt_cache_to_wb     ),
-
-    // Receive stall pipeline request
-    .stall_pipeline ( 1'b0                  ), //FIXME: WB flush in case of xcpt ??
 
     // Request from the ALU stage
     .req_instr_pc   ( req_to_dcache_pc      ), 
@@ -306,6 +321,8 @@ cache_top
 
     // Response from the memory hierarchy
     .rsp_data_miss  ( rsp_data_miss         ),
+    .rsp_bus_error  ( rsp_cache_id &
+                      rsp_bus_error         ),   
     .rsp_valid_miss ( rsp_cache_id & 
                       rsp_valid_miss        )
 );
@@ -325,6 +342,7 @@ wb_top
     // Exceptions
     .xcpt_fetch             ( xcpt_fetch_to_wb      ),
     .xcpt_decode            ( xcpt_decode_to_wb     ),
+    .xcpt_alu               ( xcpt_alu_to_wb        ),
     .xcpt_cache             ( xcpt_cache_to_wb      ),
 
     // Request from cache stage

@@ -44,6 +44,7 @@ memory_request_t                        icache_req_info_miss;
 logic [`DCACHE_LINE_WIDTH-1:0]          rsp_data_miss;
 logic                                   rsp_valid_miss;
 logic                                   rsp_cache_id;
+logic                                   rsp_bus_error;
 
 //////////////////////////////////////////////////
 // Core top instance
@@ -70,6 +71,7 @@ core_top
                                       
     // Response from the memory hierarchy                                  
     .rsp_data_miss          ( rsp_data_miss         ),
+    .rsp_bus_error          ( rsp_bus_error         ),
     .rsp_valid_miss         ( rsp_valid_miss        ),
     .rsp_cache_id           ( rsp_cache_id          ) // 0 for I$, 1 for D$
 );
@@ -90,6 +92,7 @@ memory_request_t    req_mm_info_ff;
 
 // Response from MM to core arbiter
 logic rsp_mm_valid;
+logic rsp_mm_bus_error;
 logic [`ICACHE_LINE_WIDTH-1:0]  rsp_mm_data;
 
 //////////////////////////////////////////////////
@@ -171,6 +174,7 @@ begin
 
                 // Response to the core
                 rsp_valid_miss  = 1'b1;
+                rsp_bus_error   = rsp_mm_bus_error;
                 rsp_cache_id    = 1'b1; // response to D$
                 rsp_data_miss   = rsp_mm_data; 
 
@@ -202,6 +206,7 @@ begin
 
                 // Response to the core                
                 rsp_valid_miss  = 1'b1;
+                rsp_bus_error   = rsp_mm_bus_error;
                 rsp_cache_id    = 1'b0; // response to I$
                 rsp_data_miss   = rsp_mm_data;
                 
@@ -225,7 +230,8 @@ logic [`LATENCY_MM_RSP_RANGE] mem_rsp_count;
 
 always_ff @(posedge clk_i) 
 begin
-    rsp_mm_valid  <= 1'b0;
+    rsp_mm_valid     <= 1'b0;
+    rsp_mm_bus_error <= 1'b0;
 
     if (reset_i)
     begin 
@@ -236,6 +242,8 @@ begin
         $display("[CORE TB] Main memory loaded. PC@'h1010 = %h",main_memory['h1010 >> `ICACHE_RSH_VAL]);          
         $display("[CORE TB] Main memory loaded. PC@'h1020 = %h",main_memory['h1020 >> `ICACHE_RSH_VAL]);          
         $display("[CORE TB] Main memory loaded. PC@'h1030 = %h",main_memory['h1030 >> `ICACHE_RSH_VAL]);          
+        $display("[CORE TB] Main memory loaded. PC@'h1800 = %h",main_memory['h1800 >> `ICACHE_RSH_VAL]);          
+        $display("[CORE TB] Main memory loaded. PC@'h2000 = %h",main_memory['h2000 >> `ICACHE_RSH_VAL]);          
         $display("------------------------------------------");          
         $display("------------------------------------------");          
     end
@@ -248,18 +256,25 @@ begin
             // Send response to the core arbiter
             rsp_mm_valid  <= 1'b1;
 
-            // Load
-            if (!req_mm_info_ff.is_store)
+            if (req_mm_info_ff.addr >=  `MAIN_MEMORY_DEPTH ) 
             begin
-                `ifdef VERBOSE_CORETB       
-                    $display("[CORE TB] Main memory LD to address %h",req_mm_info_ff.addr );  
-                `endif             
-                rsp_mm_data <= main_memory[req_mm_info_ff.addr];
+                rsp_mm_bus_error <= 1'b1;
             end
-            //Store
             else
             begin
-        	    main_memory[req_mm_info_ff.addr] <= req_mm_info_ff.data;
+                // Load
+                if (!req_mm_info_ff.is_store)
+                begin
+                    `ifdef VERBOSE_CORETB       
+                        $display("[CORE TB] Main memory LD to address %h",req_mm_info_ff.addr );  
+                    `endif             
+                    rsp_mm_data <= main_memory[req_mm_info_ff.addr];
+                end
+                //Store
+                else
+                begin
+        	        main_memory[req_mm_info_ff.addr] <= req_mm_info_ff.data;
+                end
             end
             // Reset counter
             mem_rsp_count <= '0; 

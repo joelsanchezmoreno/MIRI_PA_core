@@ -8,12 +8,14 @@ module alu_top
     // Stall pipeline
     input   logic                           stall_alu,
     output  logic                           alu_busy,
+    input   logic                           flush_alu,
 
     // Exceptions
     input   fetch_xcpt_t                    xcpt_fetch_in,
     output  fetch_xcpt_t                    xcpt_fetch_out,
     input   decode_xcpt_t                   xcpt_decode_in,
     output  decode_xcpt_t                   xcpt_decode_out,
+    output  alu_xcpt_t                      xcpt_alu_out,
     
     // Request from decode stage
     input   logic                           req_alu_valid,  
@@ -38,6 +40,7 @@ module alu_top
  
     //Bypass
     output  logic [`REG_FILE_DATA_RANGE]    alu_data_bypass,
+    output  logic                           alu_data_valid,
     input   logic [`REG_FILE_DATA_RANGE]    cache_data_bypass,
     input   logic                           cache_data_bp_valid
 );
@@ -51,17 +54,22 @@ assign alu_hazard = stall_alu | alu_busy;
 // Exceptions
 fetch_xcpt_t    xcpt_fetch_ff;
 decode_xcpt_t   xcpt_decode_ff;
+alu_xcpt_t      xcpt_alu_ff;
+alu_xcpt_t      xcpt_alu_next;
 
-//         CLK    RST    EN           DOUT             DIN             DEF
-`RST_EN_FF(clock, reset, !alu_hazard, xcpt_decode_ff,  xcpt_decode_in, '0)
-`RST_EN_FF(clock, reset, !alu_hazard, xcpt_fetch_ff,   xcpt_fetch_in,  '0)
+//         CLK    RST                EN                                 DOUT             DIN             DEF
+`RST_EN_FF(clock, reset | flush_alu, !alu_hazard,                       xcpt_decode_ff,  xcpt_decode_in, '0)
+`RST_EN_FF(clock, reset | flush_alu, !alu_hazard,                       xcpt_fetch_ff,   xcpt_fetch_in,  '0)
+`RST_EN_FF(clock, reset | flush_alu, !alu_hazard | cache_data_bp_valid, xcpt_alu_ff,     xcpt_alu_next,  '0)
 
 assign xcpt_decode_out  = (alu_hazard) ? xcpt_decode_out : xcpt_decode_ff;
 assign xcpt_fetch_out   = (alu_hazard) ? xcpt_fetch_out  : xcpt_fetch_ff;
+assign xcpt_alu_out     = (alu_hazard) ? xcpt_alu_out    : xcpt_alu_ff;
 
 ////////////////////////////////////
 // Request to D$ stage
 
+logic            req_dcache_valid_next;
 logic            req_dcache_valid_ff;
 dcache_request_t req_dcache_info_next;
 dcache_request_t req_dcache_info_ff;
@@ -89,27 +97,26 @@ assign  req_r_type_instr_next = (is_r_type_instr(req_alu_info.opcode)) ? 1'b1 : 
 `EN_FF(clock, !alu_hazard,                        req_dst_reg_ff,      req_alu_info.rd_addr)
 `EN_FF(clock, !alu_hazard,                        req_dcache_pc_ff,    req_alu_pc)
 
-//         CLK    RST    EN           DOUT                 DIN            DEF
-`RST_EN_FF(clock, reset, !alu_hazard, req_dcache_valid_ff, req_alu_valid, 1'b0)
+//         CLK    RST    EN                       DOUT                 DIN                    DEF
+`RST_EN_FF(clock, reset, !alu_hazard | flush_alu, req_dcache_valid_ff, req_dcache_valid_next, 1'b0)
 
-assign req_dcache_valid = (alu_hazard) ? 1'b0 : req_dcache_valid_ff;
+assign req_dcache_valid_next = (flush_alu) ? 1'b0 : 
+                                             req_alu_valid;
 
-assign req_dcache_info  = (alu_hazard) ? req_dcache_info  : req_dcache_info_ff;
-assign req_m_type_instr = (alu_hazard) ? req_m_type_instr : req_m_type_instr_ff;
-assign req_r_type_instr = (alu_hazard) ? req_r_type_instr : req_r_type_instr_ff;
-assign req_dst_reg      = (alu_hazard) ? req_dst_reg      : req_dst_reg_ff;
-assign req_dcache_pc    = (alu_hazard) ? req_dcache_pc    : req_dcache_pc_ff;
+assign req_dcache_valid = (alu_hazard | flush_alu) ? 1'b0 : 
+                                                     req_dcache_valid_ff;
+
+assign req_dcache_info  = (alu_hazard | flush_alu) ? req_dcache_info  : req_dcache_info_ff;
+assign req_m_type_instr = (alu_hazard | flush_alu) ? req_m_type_instr : req_m_type_instr_ff;
+assign req_r_type_instr = (alu_hazard | flush_alu) ? req_r_type_instr : req_r_type_instr_ff;
+assign req_dst_reg      = (alu_hazard | flush_alu) ? req_dst_reg      : req_dst_reg_ff;
+assign req_dcache_pc    = (alu_hazard | flush_alu) ? req_dcache_pc    : req_dcache_pc_ff;
 
 ////////////////////////////////////
 // ALU is busy when we perform MUL operation
-logic [`REG_FILE_DATA_RANGE] alu_mul_data;
-logic [`REG_FILE_DATA_RANGE] alu_mul_data_ff;
 
 //         CLK   RST    EN          DOUT      DIN            DEF
 `RST_EN_FF(clock,reset, !stall_alu, alu_busy, alu_busy_next, 1'b0)
-
-//     CLK   EN                                                 DOUT             DIN
-`EN_FF(clock,(alu_busy & !alu_busy_next) | cache_data_bp_valid, alu_mul_data_ff, alu_mul_data)
 
 ////////////////////////////////////
 // Branch signals
@@ -126,7 +133,12 @@ logic			 	    take_branch_next;
 ////////////////////////////////////
 // Bypass data
 
-assign alu_data_bypass = (alu_hazard) ? alu_data_bypass : req_dcache_info_next.data;
+assign alu_data_bypass = (alu_hazard) ? alu_data_bypass : 
+                                        req_dcache_info_next.data;
+
+assign alu_data_valid  = (flush_alu ) ? 1'b0            :
+                         (alu_hazard) ? alu_data_valid  : 
+                                        req_alu_valid   ;
 
 logic cache_req_is_load;
 //         CLK    RST    EN           DOUT               DIN                                 DEF
@@ -139,53 +151,75 @@ logic cache_req_is_load;
 logic   [`REG_FILE_DATA_RANGE]  ra_data;
 logic   [`REG_FILE_DATA_RANGE]  rb_data;
 
+// Overflow signal
+logic [`ALU_OVW_DATA_RANGE] oper_data;
+logic [`ALU_OVW_DATA_RANGE] oper_data_2;
+
 always_comb
 begin
+    // Branch
 	take_branch_next     = 1'b0;
     branch_pc_next       = '0;
+
+    // Dcache request
     req_dcache_info_next = '0;
 
+    // Exception
+    xcpt_alu_next.xcpt_overflow = 1'b0 ;
+    xcpt_alu_next.xcpt_pc       = req_alu_pc;
+
+    // Bypass
     ra_data = ((req_dst_reg == req_alu_info.ra_addr) & cache_data_bp_valid ) ? cache_data_bypass : req_alu_info.ra_data;
     rb_data = ((req_dst_reg == req_alu_info.rb_addr) & cache_data_bp_valid ) ? cache_data_bypass : req_alu_info.rb_data;
 
     // ADD
 	if (req_alu_info.opcode == `INSTR_ADD_OPCODE)
 	begin
-		req_dcache_info_next.data  = ra_data + rb_data;
-	end
+		//{carry,req_dcache_info_next.data}  = {ra_data[`ALU_DATA_MSB],ra_data} + {rb_data[`ALU_DATA_MSB],rb_data};
+        //xcpt_alu_next.xcpt_overflow        = (ra_data[`ALU_DATA_MSB] == rb_data[`ALU_DATA_MSB]) ? (ra_data[`ALU_DATA_MSB] != carry) : 1'b0;
+        oper_data                   =  `ZX(`ALU_OVW_DATA_WIDTH,ra_data) + `ZX(`ALU_OVW_DATA_WIDTH,rb_data);
+        req_dcache_info_next.data   =  oper_data[`REG_FILE_DATA_RANGE];
+        xcpt_alu_next.xcpt_overflow = (oper_data[`REG_FILE_DATA_WIDTH+:`REG_FILE_DATA_WIDTH] != '0) & (req_alu_valid | req_dcache_valid_ff);
+    end
     // SUB
 	else if (req_alu_info.opcode == `INSTR_SUB_OPCODE)
     begin
-        req_dcache_info_next.data  = ra_data - rb_data;
+        req_dcache_info_next.data  = ra_data - rb_data;        
     end
     // MUL
-	else if (req_alu_info.opcode == `INSTR_MUL_OPCODE)
+    else if (req_alu_info.opcode == `INSTR_MUL_OPCODE)
     begin
-        req_dcache_info_next = ra_data * rb_data;
+        oper_data                   =  `ZX(`ALU_OVW_DATA_WIDTH,ra_data) * `ZX(`ALU_OVW_DATA_WIDTH,rb_data);
+        req_dcache_info_next.data   =  oper_data[`REG_FILE_DATA_RANGE];
+        xcpt_alu_next.xcpt_overflow = (oper_data[`REG_FILE_DATA_WIDTH+:`REG_FILE_DATA_WIDTH] != '0) & (req_alu_valid | req_dcache_valid_ff);
     end
     //ADDI
     else if (req_alu_info.opcode == `INSTR_ADDI_OPCODE)
     begin
-        req_dcache_info_next.data = ra_data + req_alu_info.offset;
-    end
+        //{carry,req_dcache_info_next.data}  = {ra_data[`ALU_DATA_MSB],ra_data} + {req_alu_info.offset[`ALU_DATA_MSB],req_alu_info.offset};
+        //xcpt_alu_next.xcpt_overflow        = (ra_data[`ALU_DATA_MSB] == req_alu_info.offset[`ALU_DATA_MSB]) ? (ra_data[`ALU_DATA_MSB] != carry) : 1'b0;
+        oper_data                   =  `ZX(`ALU_OVW_DATA_WIDTH,ra_data) + `ZX(`ALU_OVW_DATA_WIDTH,req_alu_info.offset);
+        req_dcache_info_next.data   =  oper_data[`REG_FILE_DATA_RANGE];
+        xcpt_alu_next.xcpt_overflow = (oper_data[`REG_FILE_DATA_WIDTH+:`REG_FILE_DATA_WIDTH] != '0) & (req_alu_valid | req_dcache_valid_ff);
+  end
     // MEM
 	else if (is_m_type_instr(req_alu_info.opcode)) 
     begin
         //LD
         if (is_load_instr(req_alu_info.opcode))
-            req_dcache_info_next.addr = (  req_dst_reg == req_alu_info.ra_addr
-                                         & cache_data_bp_valid              ) ? cache_data_bypass    + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) : // Bypass Cache to Cache_next
-                                                                                req_alu_info.ra_data + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) ;
+            oper_data = (  req_dst_reg == req_alu_info.ra_addr
+                         & cache_data_bp_valid                ) ? `ZX(`ALU_OVW_DATA_WIDTH,cache_data_bypass    + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset)) : // Bypass Cache to Cache_next
+                                                                  `ZX(`ALU_OVW_DATA_WIDTH,req_alu_info.ra_data + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset)) ;
         //ST
         else
-            req_dcache_info_next.addr = (  req_dst_reg == req_alu_info.rd_addr
-                                         & cache_data_bp_valid)               ? cache_data_bypass    + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) : // Bypass Cache to Cache_next
-                                                                                req_alu_info.rb_data + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset) ;
+            oper_data = (  req_dst_reg == req_alu_info.rd_addr
+                         & cache_data_bp_valid                ) ? `ZX(`ALU_OVW_DATA_WIDTH,cache_data_bypass    + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset)) : // Bypass Cache to Cache_next
+                                                                  `ZX(`ALU_OVW_DATA_WIDTH,req_alu_info.rb_data + `ZX(`REG_FILE_DATA_WIDTH,req_alu_info.offset)) ;
 
         // Used only on store requests
-		req_dcache_info_next.data   = (  cache_req_is_load & cache_data_bp_valid
-                                       & (req_dst_reg == req_alu_info.ra_addr))? cache_data_bypass : // Bypass Cache to Cache_next
-                                                                                 req_alu_info.ra_data;
+		oper_data_2 = (  cache_req_is_load & cache_data_bp_valid
+                       & (req_dst_reg == req_alu_info.ra_addr)  ) ? `ZX(`ALU_OVW_DATA_WIDTH,cache_data_bypass) : // Bypass Cache to Cache_next
+                                                                    `ZX(`ALU_OVW_DATA_WIDTH,req_alu_info.ra_data);
         
         // Specify LD or ST for dcache request
         if (req_alu_info.opcode == `INSTR_LDB_OPCODE | req_alu_info.opcode == `INSTR_LDW_OPCODE)
@@ -198,6 +232,12 @@ begin
             req_dcache_info_next.size = Byte;
         else
             req_dcache_info_next.size = Word;
+
+        // Check possible overflow
+        req_dcache_info_next.addr   =  oper_data[`REG_FILE_DATA_RANGE];
+        req_dcache_info_next.data   =  oper_data_2[`REG_FILE_DATA_RANGE];
+        xcpt_alu_next.xcpt_overflow =   (oper_data[`REG_FILE_DATA_WIDTH+:`REG_FILE_DATA_WIDTH] != '0)
+                                      | (oper_data_2[`REG_FILE_DATA_WIDTH+:`REG_FILE_DATA_WIDTH] != '0);
     end	
     // BEQ
 	else if (req_alu_info.opcode == `INSTR_BEQ_OPCODE) 
@@ -284,8 +324,8 @@ end
 logic [`ALU_MUL_LATENCY_RANGE] mul_count_next;
 logic [`ALU_MUL_LATENCY_RANGE] mul_count;
 
-//         CLK    RST    EN          DOUT       DIN             DEF
-`RST_EN_FF(clock, reset, !stall_alu, mul_count, mul_count_next, '0)
+//         CLK    RST                EN          DOUT       DIN             DEF
+`RST_EN_FF(clock, reset | flush_alu, !stall_alu, mul_count, mul_count_next, '0)
 
 always_comb
 begin

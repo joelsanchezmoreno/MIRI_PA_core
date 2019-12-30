@@ -9,6 +9,7 @@ module wb_top
     // Exceptions
     input   fetch_xcpt_t                        xcpt_fetch,
     input   decode_xcpt_t                       xcpt_decode,
+    input   alu_xcpt_t                          xcpt_alu,    
     input   cache_xcpt_t                        xcpt_cache,    
      
     // Request from cache stage
@@ -33,7 +34,34 @@ module wb_top
 always_comb
 begin
     xcpt_valid = 1'b0;
+    rmAddr     = '0;
+    rmPC       = '0;
 
+    if (  xcpt_fetch.xcpt_itlb_miss 
+        | xcpt_fetch.xcpt_bus_error )
+    begin
+        xcpt_valid  = 1'b1;
+        rmPC        = xcpt_fetch.xcpt_pc; 
+        rmAddr      = xcpt_fetch.xcpt_addr_val;
+    end
+    else if (xcpt_decode.xcpt_illegal_instr)
+    begin
+        xcpt_valid  = 1'b1;
+        rmPC        = xcpt_decode.xcpt_pc;
+    end
+    else if (xcpt_alu.xcpt_overflow)
+    begin
+        xcpt_valid  = 1'b1;
+        rmPC        = xcpt_alu.xcpt_pc;
+    end
+    else if (  xcpt_cache.xcpt_addr_fault 
+             | xcpt_cache.xcpt_dtlb_miss
+             | xcpt_cache.xcpt_bus_error)
+    begin
+        xcpt_valid  = 1'b1;
+        rmPC        = xcpt_cache.xcpt_pc;
+        rmAddr      = xcpt_cache.xcpt_addr_val;
+    end
 end
 
 // RF write requests

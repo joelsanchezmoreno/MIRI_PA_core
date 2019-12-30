@@ -10,6 +10,7 @@ module instruction_cache
     input  logic                            clock,
     input  logic                            reset,
     output logic                            icache_ready,
+    output logic                            xcpt_bus_error,
 
     // Request from the core pipeline
     input  logic [`ICACHE_ADDR_WIDTH-1:0]   req_addr,
@@ -25,6 +26,7 @@ module instruction_cache
 
     // Response from the memory hierarchy
     input  logic [`ICACHE_LINE_WIDTH-1:0]   rsp_data_miss,
+    input  logic                            rsp_bus_error,
     input  logic                            rsp_valid_miss
 );
 
@@ -104,6 +106,7 @@ begin
     // Do not respond to the fetch top until we ensure we have the correct
     // data
     rsp_valid       = 1'b0;
+    xcpt_bus_error  = 1'b0;
 
     // If there is a request and we are not performing one
     if (req_valid & !pendent_req_ff)
@@ -147,16 +150,19 @@ begin
     // tag 
     if (rsp_valid_miss)
     begin
-        miss_icache_pos = miss_icache_way_ff + miss_icache_set_ff*`ICACHE_WAYS_PER_SET;
-        `ifdef VERBOSE_ICACHE
-            $display("[ICACHE] Response from MM valid. instMem_tag[%h] = %h",miss_icache_pos,rsp_data_miss);
-        `endif            
-        instMem_tag[miss_icache_pos]   = req_addr_tag;
-        instMem_data[miss_icache_pos]  = rsp_data_miss;
-        instMem_valid[miss_icache_pos] = 1'b1; 
-        pendent_req                    = 1'b0;
-        icache_ready_next              = 1'b1;
-
+        xcpt_bus_error  = rsp_bus_error;
+        if (!rsp_bus_error)
+        begin
+            miss_icache_pos = miss_icache_way_ff + miss_icache_set_ff*`ICACHE_WAYS_PER_SET;
+            `ifdef VERBOSE_ICACHE
+                $display("[ICACHE] Response from MM valid. instMem_tag[%h] = %h",miss_icache_pos,rsp_data_miss);
+            `endif            
+            instMem_tag[miss_icache_pos]   = req_addr_tag;
+            instMem_data[miss_icache_pos]  = rsp_data_miss;
+            instMem_valid[miss_icache_pos] = 1'b1; 
+            pendent_req                    = 1'b0;
+            icache_ready_next              = 1'b1;
+        end
         // Return data to fetch top
         rsp_valid   = 1'b1; 
         rsp_data    = instMem_data[miss_icache_pos];
@@ -166,11 +172,13 @@ end
 logic [`ICACHE_NUM_SET_RANGE] update_set;  
 logic [`ICACHE_WAYS_PER_SET_RANGE] update_way;  
 
-assign update_set = (rsp_valid_miss) ? miss_icache_set_ff :
+assign update_set = (rsp_valid_miss &
+                     !rsp_bus_error) ? miss_icache_set_ff :
                     (icache_hit)     ? req_addr_set       :
                     '0;
 
-assign update_way = (rsp_valid_miss) ? miss_icache_way_ff :
+assign update_way = (rsp_valid_miss &
+                     !rsp_bus_error) ? miss_icache_way_ff :
                     (icache_hit)     ? hit_way            :
                     '0;              
 // This module returns the oldest way accessed for a given set and updates the
@@ -195,7 +203,8 @@ icache_lru
     .victim_way         ( miss_icache_way   ),
 
     // Update the LRU logic
-    .update_req         ( rsp_valid_miss |
+    .update_req         ( (rsp_valid_miss &
+                           !rsp_bus_error) |
                           icache_hit        ),
     .update_set         ( update_set        ),
     .update_way         ( update_way        )

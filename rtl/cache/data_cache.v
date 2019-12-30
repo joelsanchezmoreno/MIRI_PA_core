@@ -12,7 +12,7 @@ module data_cache
     output  logic                            dcache_ready,
 
     // Exception
-    output  logic                            xcpt_address_fault,
+    output  logic                            xcpt_bus_error,
 
     // Request from the core pipeline
     input   dcache_request_t                 req_info,
@@ -28,6 +28,7 @@ module data_cache
 
     // Response from the memory hierarchy
     input   logic [`DCACHE_LINE_WIDTH-1:0]   rsp_data_miss,
+    input   logic                            rsp_bus_error,
     input   logic                            rsp_valid_miss
 );
 
@@ -156,7 +157,7 @@ begin
     search_store_buffer     = 1'b0;
 
         // Exception
-    xcpt_address_fault  = 1'b0;
+    xcpt_bus_error = 1'b0;
 
     pending_req         = pending_req_ff;
     
@@ -174,21 +175,8 @@ begin
             req_set    = req_info.addr[`DCACHE_SET_ADDR_RANGE]; 
             req_offset = req_info.addr[`DCACHE_OFFSET_ADDR_RANGE] >> $clog2(req_info.size+1);
 
-            // Check that requested size and offset fits on the line
-            if ( req_valid & (req_info.size != Byte ) & ((req_offset*(req_info.size+1)*8) > `DCACHE_LINE_WIDTH ))
-            begin
-                xcpt_address_fault = 1'b1;
-                `ifdef VERBOSE_DCACHE
-                    $display("[DCACHE]  Exception triggered");
-                    $display("          size       = %h",req_info.size);
-                    $display("          offset     = %h",req_offset);
-                    $display("          addr_fault = %h",req_info.addr);
-                    $display("          max addr   = %h",`DCACHE_LINE_WIDTH-1);
-                `endif
-            end
-
             // Perform the request
-            else if (req_valid)
+            if (req_valid)
             begin
                 // Look if the requested tag is on the cache
                 for (iter = 0; iter < `DCACHE_WAYS_PER_SET; iter++)
@@ -405,49 +393,52 @@ begin
             // tag 
             if (rsp_valid_miss)
             begin
-
-                // Compute signals from the pending ST request
-                req_tag    = pending_req_ff.addr[`DCACHE_TAG_ADDR_RANGE];
-                req_set    = pending_req_ff.addr[`DCACHE_SET_ADDR_RANGE]; 
-                req_size   = pending_req_ff.size;
-
-                // If it was a ST, we modify the received line
-                if (pending_req_ff.is_store)
+                xcpt_bus_error = rsp_bus_error;
+                rsp_valid      = 1'b1;
+                if (!rsp_bus_error)
                 begin
-                    dCache_data[req_target_pos_ff]  = rsp_data_miss; 
-                    if ( req_size == Byte)
+                    // Compute signals from the pending ST request
+                    req_tag    = pending_req_ff.addr[`DCACHE_TAG_ADDR_RANGE];
+                    req_set    = pending_req_ff.addr[`DCACHE_SET_ADDR_RANGE]; 
+                    req_size   = pending_req_ff.size;
+
+                    // If it was a ST, we modify the received line
+                    if (pending_req_ff.is_store)
                     begin
-                        req_offset = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE];
-                        dCache_data[req_target_pos_ff][`GET_LOWER_BOUND(`BYTE_BITS,req_offset)+:`BYTE_BITS] =  pending_req_ff.data[`BYTE_RANGE];
+                        dCache_data[req_target_pos_ff]  = rsp_data_miss; 
+                        if ( req_size == Byte)
+                        begin
+                            req_offset = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE];
+                            dCache_data[req_target_pos_ff][`GET_LOWER_BOUND(`BYTE_BITS,req_offset)+:`BYTE_BITS] =  pending_req_ff.data[`BYTE_RANGE];
+                        end
+                        else
+                        begin
+                            req_offset = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE]  >> $clog2(pending_req_ff.size+1);
+                            dCache_data[req_target_pos_ff][`GET_LOWER_BOUND(`DWORD_BITS,req_offset)+:`DWORD_BITS] =  pending_req_ff.data[`DWORD_RANGE];
+                        end
                     end
+                    // If it was a LD, we copy the line received from memory and
+                    // return valid data
                     else
                     begin
-                        req_offset = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE]  >> $clog2(pending_req_ff.size+1);
-                        dCache_data[req_target_pos_ff][`GET_LOWER_BOUND(`DWORD_BITS,req_offset)+:`DWORD_BITS] =  pending_req_ff.data[`DWORD_RANGE];
-                    end
-                end
-                // If it was a LD, we copy the line received from memory and
-                // return valid data
-                else
-                begin
-                    dCache_data[req_target_pos_ff]  = rsp_data_miss;
+                        dCache_data[req_target_pos_ff]  = rsp_data_miss;
 
-                    // Respond request from dcache_top
-                    rsp_valid = 1'b1;
-                    if ( req_size == Byte)
-                    begin
-                        req_offset = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE];
-                        rsp_data  = `ZX_BYTE(`DCACHE_MAX_ACC_SIZE,rsp_data_miss[`GET_LOWER_BOUND(`BYTE_BITS,req_offset)+:`BYTE_BITS]);
+                        // Respond request from dcache_top
+                        if ( req_size == Byte)
+                        begin
+                            req_offset = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE];
+                            rsp_data  = `ZX_BYTE(`DCACHE_MAX_ACC_SIZE,rsp_data_miss[`GET_LOWER_BOUND(`BYTE_BITS,req_offset)+:`BYTE_BITS]);
+                        end
+                        else
+                        begin
+                            req_offset = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE]  >> $clog2(pending_req_ff.size+1);
+                            rsp_data  = `ZX_DWORD(`DCACHE_MAX_ACC_SIZE, rsp_data_miss[`GET_LOWER_BOUND(`DWORD_BITS,req_offset)+:`DWORD_BITS]);
+                        end
                     end
-                    else
-                    begin
-                        req_offset = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE]  >> $clog2(pending_req_ff.size+1);
-                        rsp_data  = `ZX_DWORD(`DCACHE_MAX_ACC_SIZE, rsp_data_miss[`GET_LOWER_BOUND(`DWORD_BITS,req_offset)+:`DWORD_BITS]);
-                    end
-                end
 
-                dCache_tag[req_target_pos_ff]   = req_tag;
-                dCache_valid[req_target_pos_ff] = 1'b1; 
+                    dCache_tag[req_target_pos_ff]   = req_tag;
+                    dCache_valid[req_target_pos_ff] = 1'b1;
+                end 
 
                 // Next stage
                 dcache_ready_next   = 1'b1;
