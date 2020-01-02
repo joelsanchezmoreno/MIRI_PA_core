@@ -125,6 +125,22 @@ typedef enum logic [1:0] {
    write_cache_line= 2'b11
 } dcache_state_t;
 
+typedef enum logic [0:0] {
+   User            = 1'b0, 
+   Supervisor      = 1'b1
+} priv_mode_t;
+
+typedef enum logic [2:0] {
+   iTlb_miss        = 3'b000, 
+   fetch_bus_error  = 3'b001,
+   illegal_instr    = 3'b010,
+   overflow         = 3'b011,
+   dTlb_miss        = 3'b100,
+   cache_bus_error  = 3'b101,
+   cache_addr_fault = 3'b110,
+   reserved         = 3'b111
+} xcpt_type_t;
+
 ////////////////////////////////////////////////////////////////////////////////
 // STRUCTS
 ////////////////////////////////////////////////////////////////////////////////
@@ -156,7 +172,7 @@ typedef struct packed
 
 typedef struct packed 
 {
-    logic [`DCACHE_ADDR_RANGE]          addr;
+    logic [`PHY_ADDR_RANGE]             addr;
     logic                               is_store; // asserted when request is a store
     logic [`MAIN_MEMORY_LINE_WIDTH-1:0] data;
 } memory_request_t;
@@ -169,8 +185,23 @@ typedef struct packed
     logic [`DCACHE_MAX_ACC_SIZE-1:0]    data;
 } store_buffer_t;
 
+typedef struct packed 
+{
+    logic [`VIRT_TAG_RANGE] va_addr_tag; 
+    logic [`PHY_TAG_RANGE]  pa_addr_tag; 
+    logic                   writePriv;
+} tlb_info_t;
 
+typedef struct packed 
+{
+    logic [`VIRT_ADDR_RANGE] virt_addr; 
+    logic [`PHY_ADDR_RANGE]  phy_addr; 
+    logic                    writePriv;
+} tlb_req_info_t;
+
+/////////////////
 // Exceptions
+
 typedef struct packed 
 {
     logic                       xcpt_itlb_miss;

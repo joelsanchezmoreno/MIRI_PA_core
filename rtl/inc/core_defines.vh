@@ -8,12 +8,17 @@
 ///////////////////////
 // Global defines
 ///////////////////////
-`define PC_WIDTH        32
-`define PA_WIDTH        20
+`define VIRT_ADDR_WIDTH 32
+`define PHY_ADDR_WIDTH  20
+
+`define PC_WIDTH        `VIRT_ADDR_WIDTH
 `define PC_WIDTH_RANGE  `PC_WIDTH-1:0
 
 `define BYTE_RANGE      `BYTE_BITS-1:0
 `define DWORD_RANGE     `DWORD_BITS-1:0
+
+`define VIRT_ADDR_RANGE `VIRT_ADDR_WIDTH-1:0
+`define PHY_ADDR_RANGE  `PHY_ADDR_WIDTH-1:0
 
 ///////////////////////
 // Register file defines
@@ -25,8 +30,41 @@
 `define REG_FILE_ADDR_WIDTH $clog2(`REG_FILE_NUM_REGS)
 `define REG_FILE_ADDR_RANGE `REG_FILE_ADDR_WIDTH-1:0
 
-`define REG_FILE_XCPT_ADDR_WIDTH `PC_WIDTH  //FIXME: what should be the @ width
+`define REG_FILE_XCPT_ADDR_WIDTH `PC_WIDTH
 `define REG_FILE_XCPT_ADDR_RANGE `REG_FILE_XCPT_ADDR_WIDTH-1:0
+
+///////////////////////
+// Virtual Memory defines
+///////////////////////
+`define VM_PAGE_SIZE        4096 // bytes
+`define VM_PAGE_SIZE_WIDTH  $clog2(`VM_PAGE_SIZE) // bytes
+
+`define VIRT_ADDR_TAG   `VIRT_ADDR_WIDTH-`VM_PAGE_SIZE_WIDTH
+`define PHY_ADDR_TAG    `PHY_ADDR_WIDTH-`VM_PAGE_SIZE_WIDTH
+
+`define VIRT_TAG_RANGE  `VIRT_ADDR_TAG-1:0
+`define PHY_TAG_RANGE   `PHY_ADDR_TAG-1:0
+
+`define VIRT_ADDR_OFFSET        `VM_PAGE_SIZE_WIDTH
+`define VIRT_ADDR_OFFSET_RANGE  `VIRT_ADDR_OFFSET-1 : 0
+`define VIRT_ADDR_TAG_RANGE     `VIRT_ADDR_WIDTH-1:`VIRT_ADDR_OFFSET
+`define PHY_ADDR_TAG_RANGE      `PHY_ADDR_WIDTH-1:`VM_PAGE_SIZE_WIDTH
+
+// TLB
+`define TLB_ENTRIES       4
+`define TLB_ENTRIES_RANGE `TLB_ENTRIES-1:0
+
+`define TLB_NUM_SET         2
+`define TLB_NUM_WAYS        2
+`define TLB_WAYS_PER_SET    `TLB_NUM_SET/`TLB_NUM_WAYS
+
+`define TLB_NUM_SET_WIDTH   $clog2(`TLB_NUM_SET)
+
+`define TLB_NUM_SET_RANGE       `TLB_NUM_SET-1:0
+`define TLB_NUM_WAYS_RANGE      `TLB_NUM_WAYS-1:0
+`define TLB_WAYS_PER_SET_RANGE  `TLB_WAYS_PER_SET-1:0
+
+`define TLB_SET_ADDR_RANGE  (`TLB_NUM_SET_WIDTH + `VIRT_ADDR_OFFSET-1):`VIRT_ADDR_OFFSET 
 
 ///////////////////////
 // Instruction defines
@@ -107,7 +145,7 @@
 ///////////////////////
 // Instruction cache defines
 ///////////////////////
-`define ICACHE_ADDR_WIDTH   `PC_WIDTH
+`define ICACHE_ADDR_WIDTH   `PHY_ADDR_WIDTH
 `define ICACHE_ADDR_RANGE   `ICACHE_ADDR_WIDTH-1:0
 `define ICACHE_LINE_WIDTH   `MAIN_MEMORY_LINE_WIDTH // data
 
@@ -142,7 +180,7 @@
 ///////////////////////
 // Data cache defines
 ///////////////////////
-`define DCACHE_ADDR_WIDTH       `PC_WIDTH  //FIXME: what should be the @ width
+`define DCACHE_ADDR_WIDTH       `PHY_ADDR_WIDTH 
 `define DCACHE_ADDR_RANGE       `DCACHE_ADDR_WIDTH-1:0
 `define DCACHE_LINE_WIDTH       `MAIN_MEMORY_LINE_WIDTH // data
 `define DCACHE_LINE_RANGE       `DCACHE_LINE_WIDTH-1:0 // data
