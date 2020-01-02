@@ -8,5 +8,5 @@ int main() {
 			for(k = 0; k < 128; k++)
 				c[i][j] = c[i][j] + a[i][k]*b[k][j];
 		}	
-	};
+	}
 }
