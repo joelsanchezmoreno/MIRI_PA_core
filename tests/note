@@ -1,0 +1,403 @@
+///////////////////////////////////////////////////////////////////////////
+// TEST LOADS AND STORES
+
+Test name: multiple_ld_st_test.hex
+
+# mem[0x1008+0x30] -- initial value 0xCBAE05FA
+
+    ADDI R0,R0,0x7
+    ADDI R1,R1,0x3
+    ADD  R2,R0,R1 
+    ADDI R3,R3,0x1008   
+    LDW  R5,0x30(R3)  
+    STW  0x30(R3),R2  # mem[0x1008+0x30] = 0x0000 0000A
+    LDW  R4,0x30(R3)  # R4 = mem[0x1008+0x30]
+    ADD  R5,R5,R4     # R5 = R5 + R4 =  0xCBAE05FA + 0xA = 0xCBAE0604  
+    STB  0x32(R3),R1  # mem[0x1008+0x30] = 0x0003 000A
+    STB  0x31(R3),R0  # mem[0x1008+0x30] = 0x0003 070A
+    STW  0x4C(R3),R2  # mem[0x1008+0x4C] = 0x0000 000A
+    STW  0x68(R3),R3  # mem[0x1008+0x68] = 0x0000 1008
+    
+What does this check: 
+    - Initialize memory (0x1038) to 0xCBAE05FA 
+    - Ensure simple LDW and STW work
+    - Checks that first LDW brings new line and stalls pipeline
+    - Checks that the first STW hits on the D$ but is queued on the store buffer
+    - Checks that the second LDW stalls the pipeline and we perform the ST that was on the ST buffer
+        - R5 = 0xCBAE0604
+    - Checks that we can perform byte accesses to memory (2 STB)
+    - Checks that the second STW is placed on way 1 of the set 1 of D$
+    - Checks that the third STW is placed on way 0 of set 1 of D$ and this causes an evict of way 0, which
+      implies performing the 2 STB on the store buffer
+
+- If evertyhing goes as expected we should see the next values on the registers:
+        - R0 = 0x7
+        - R1 = 0x3
+        - R2 = 0xA
+        - R3 = 0x1008
+        - R4 = 0xA
+        - R5 = 0xCBAE0604
+        - mm[0x1080] = compute
+        - mm[0x1084] = 0xEDA
+        - mm[0x1038] = 0x0003070A
+        - mm[0x1054] = 0x0000000A
+        - mm[0x1070] = 0x00001008
+
+Result: All working as expected
+
+///////////////////////////////////////////////////////////////////////////
+// TEST BRANCHES
+
+Test name: multiple_branches.hex
+
+# mem[0x1080] -- initial value 0x00000000
+
+Next to be tested: branches
+1000:   ADDI R0,R0,0x1080       # @data  
+1004:   ADDI R1,R1,0x0          # iter
+1008:   ADDI R2,R2,0x2          # num iterations - 1
+100C:   ADDI R4,R4,0xEDA
+1010:   BEQ  R5,R4,0x10F0       # jump to NOPs as we have finished
+
+#loop
+    1014:   BGT R1,R2,0x102C
+    1018:   LDW R3,0(R0)
+    101C:   ADD R3,R3,R2
+    1020:   STB 0(R0),R3
+    1024:   ADDI R1,R1,0x1
+    1028:   JUMP 0x1014
+
+102C:   BLT R1,R2,0x103C
+    1030:   STW 0x4(R0),R4
+    1034:   ADDI R5,R5,0xEDA
+    1038:   JUMP 0x1010
+
+103C:   ADDI R5,R5,0xFEA
+        NOP
+    
+What does this check: 
+    - Initialize memory (0x1080) to 0x00000000
+    - Ensure that BEQ, BGT and BNE work and we do not always jump
+    - Check that instructions are cancelled if we jump, otherwise we should execute 
+      BNE (PC: 0x102C) 2 times instead of 1
+    - Check that branches do not write on the RF (wb_rf_we = 0)
+
+- If evertyhing goes as expected we should see the next values on the registers:
+        - R0 = 0x1080
+        - R1 = 0x3
+        - R2 = 0x2
+        - R3 = 0x6
+        - R4 = 0xEDA
+        - R5 = 0xEDA -- if R5 = 0xFEA instead of EDA something went wrong with JUMP on PC 0x1038
+        - mm[0x1080] = 0x6
+        - mm[0x1084] = 0xEDA
+        
+
+Result: All working as expected
+
+///////////////////////////////////////////////////////////////////////////
+// TEST BRANCHES WITH MUL
+
+Test name: multiple_branches_with_mul.hex
+
+# mem[0x1080] -- initial value 0x00000001
+
+Next to be tested: branches
+1000:   ADDI R0,R0,0x1080       # @data  
+1004:   ADDI R1,R1,0x0          # iter
+1008:   ADDI R2,R2,0x2          # num iterations - 1
+100C:   ADDI R4,R4,0xEDA
+1010:   BEQ  R5,R4,0x10F0       # jump to NOPs as we have finished
+
+#loop
+    1014:   BGT R1,R2,0x102C
+    1018:   LDW R3,0(R0)
+    101C:   MUL R3,R3,R2
+    1020:   STB 0(R0),R3
+    1024:   ADDI R1,R1,0x1
+    1028:   JUMP 0x1014
+
+102C:   BLT R1,R2,0x103C
+    1030:   STW 0x4(R0),R4
+    1034:   ADDI R5,R5,0xEDA
+    1038:   JUMP 0x1010
+
+103C:   ADDI R5,R5,0xFEA
+        NOP
+    
+What does this check: 
+    - Initialize memory (0x1080) to 0x00000001
+    - Ensure that BEQ, BGT and BNE work and we do not always jump
+    - Check that instructions are cancelled if we jump, otherwise we should execute 
+      BNE (PC: 0x102C) 2 times instead of 1
+    - Check that branches do not write on the RF (wb_rf_we = 0)
+    - Check that MUL latency works as expected and bypasses also work as they should
+        R3 = 0x2 , 0x4, 0x8
+
+- If evertyhing goes as expected we should see the next values on the registers:
+        - R0 = 0x1080
+        - R1 = 0x3
+        - R2 = 0x2
+        - R3 = 0x8
+        - R4 = 0xEDA
+        - R5 = 0xEDA -- if R5 = 0xFEA instead of EDA something went wrong with JUMP on PC 0x1038
+        - mm[0x1080] = 0x8
+        - mm[0x1084] = 0xEDA
+        
+
+Result: All working as expected
+
+///////////////////////////////////////////////////////////////////////////
+// EXCEPTIONS ILLEGAL INSTRUCTION (TEST LOADS AND STORES)
+
+Test name: xcpt_illegal_instruction.hex
+
+# mem[0x1008+0x30] -- initial value 0xCBAE05FA
+# mem[0x2000] -- initial value 0x07EF7DA1
+
+    ADDI R0,R0,0x7
+    ADDI R1,R1,0x3
+    ADD  R2,R0,R1 
+    ADDI R3,R3,0x1008   
+    LDW  R5,0x30(R3)  
+    STW  0x30(R3),R2  # mem[0x1008+0x30] = 0x0000 0000A
+    LDW  R4,0x30(R3)  # R4 = mem[0x1008+0x30]
+    ADD  R5,R5,R4     # R5 = R5 + R4 =  0xCBAE05FA + 0xA = 0xCBAE0604  
+    STB  0x32(R3),R1  # mem[0x1008+0x30] = 0x0003 000A
+    STB  0x31(R3),R0  # mem[0x1008+0x30] = 0x0003 070A
+    STW  0x4C(R3),R2  # mem[0x1008+0x4C] = 0x0000 000A
+    STW  0x68(R3),R3  # mem[0x1008+0x68] = 0x0000 1008
+    
+What does this check: 
+    - Initialize memory (0x1038) to 0xCBAE05FA 
+    - This test is the same as the one above for LD and ST, but here we have written 
+      memory address position 0x200 with an ADDI instruction for R30 with a value of 
+      0x7DA1. 
+    - An illegal instruction will raise after last STW is executed since the fetch will 
+      start reading memory positions with incorrect opcodes. This will cause the WB stage
+      to force fetch to take a branch to exception handler at PC 0x2000.
+
+- If evertyhing goes as expected we should see the next values on the registers:
+        - R0 = 0x7
+        - R1 = 0x3
+        - R2 = 0xA
+        - R3 = 0x1008
+        - R4 = 0xA
+        - R5 = 0xCBAE0604
+        - R30 = 0x7DA1
+        - mm[0x1080] = compute
+        - mm[0x1084] = 0xEDA
+        - mm[0x1038] = 0x0003070A
+        - mm[0x1054] = 0x0000000A
+        - mm[0x1070] = 0x00001008
+
+Result: All working as expected
+
+///////////////////////////////////////////////////////////////////////////
+// EXCEPTIONS MUL OVERFLOW
+
+Test name: xcpt_mul_overflow.hex
+
+# mem[0x2000] -- initial value 0x07EF7DA1
+
+    ADDI R0,R0,0x7FFF
+    MUL  R0,R0,R0
+    ADDI R1,R1,0x7FFF
+    MUL  R1,R1,R1
+    MUL  R2,R0,R1 
+    
+What does this check: 
+    - We have written memory address position 0x200 with an ADDI instruction for 
+      ADDI R30,R30,0x7DA1. 
+    - The MUL will raise an overflow exception. Then, a branch to adress 0x2000 will be taken.
+ 
+- If evertyhing goes as expected we should see the next values on the registers:
+        - R0 = 0x3FFF0001
+        - R1 = 0x3FFF0001
+        - R30 = 0x7DA1
+
+Result: All working as expected
+
+///////////////////////////////////////////////////////////////////////////
+// EXCEPTIONS ADD OVERFLOW
+
+Test name: xcpt_add_overflow.hex
+
+# mem[0x2000] -- initial value 0x07EF7DA1
+
+    ADDI R0,R0,0x7FFF
+    MUL  R0,R0,R0
+    ADD  R0,R0,R0
+    ADD  R0,R0,R0
+    ADD  R0,R0,R0
+    
+What does this check: 
+    - We have written memory address position 0x200 with an ADDI instruction for 
+      ADDI R30,R30,0x7DA1. 
+    - The third ADD will raise an overflow exception. Then, a branch to adress 0x2000 will be taken.
+ 
+- If evertyhing goes as expected we should see the next values on the registers:
+        - R0 = 0xFFFC0004
+        - R30 = 0x7DA1
+
+Result: All working as expected
+
+///////////////////////////////////////////////////////////////////////////
+// EXCEPTIONS ADDI OVERFLOW
+
+Test name: xcpt_addi_overflow.hex
+
+# mem[0x2000] -- initial value 0x07EF7DA1
+
+    LD R0,0x1030(R0)
+    ADDI R1,R1,0x1
+    
+What does this check: 
+    - We have written memory address position 0x200 with an ADDI instruction for 
+      ADDI R30,R30,0x7DA1. 
+    - The ADDI will raise an overflow exception. Then, a branch to adress 0x2000 will be taken.
+ 
+- If evertyhing goes as expected we should see the next values on the registers:
+        - R0 = 0xFFFFFFFF
+        - R30 = 0x7DA1
+
+Result: All working as expected
+
+///////////////////////////////////////////////////////////////////////////
+// EXCEPTIONS CACHE BUS ERROR
+
+Test name: xcpt_cache_bus_error.hex
+
+# mem[0x2000] -- initial value 0x07EF7DA1
+
+    LD R0,0x1030(R0)
+    LD R1,0x0(R0)
+    ADDI R1,R1,0x1
+    
+What does this check: 
+    - We have written memory address position 0x200 with an ADDI instruction for 
+      ADDI R30,R30,0x7DA1. 
+    - The second LD will raise a bus error exception. Then, a branch to adress 0x2000 will be taken.
+ 
+- If evertyhing goes as expected we should see the next values on the registers:
+        - R0 = 0xFFFFFFFF
+        - R30 = 0x7DA1
+
+Result: All working as expected
+
+///////////////////////////////////////////////////////////////////////////
+// Exception handler testing with cache bus error
+
+Test name: xcpt_handler_tlb.hex
+
+#########
+### Code to generate the xcpt
+#1000:  ADDI R28,R28,0x6BCD
+#1004:  ADDI R29,R29,0x6BCD
+#1008:  ADDI R30,R30,0x6BCD
+#100C:  ADDI R5, R5, 0x6BCD
+#1010:  ADDI R6, R6, 0x6BCD
+#1014:  LDW R0,0x1030(R0)
+#1018:  LDW R1,0x0(R0)
+#101c:  ADDI R2,R2,0x1000
+    
+#########
+### Exception handler
+#2000:  ADDI R31,R31,0x3000     // @ to reserverd area for data
+#2004:  STW  0x0(R31),R28         // R28 will be used for dTLB xcpt id
+#2008:  STW  0x4(R31),R29         // R29 will be used for iTLB xcpt id
+#200C:  STW  0x8(R31),R30         // R30 will be used to store xcpt id
+
+#2010:  MOV  rm2,R30
+#2014:  ADDI R29,R27,0x0          // R27 is  by default 0
+#2018:  ADDI R28,R27,0x4
+#201C:  BNE  R30,R29,0x204C     // if not iTLB miss jump
+
+    #2020:  STW  0x0C(R31),R5
+    #2024:  STW  0x10(R31),R6
+    #2028:  MOV  rm1,R5         // save @ fault value
+    #202C:  ADDI R6,R5,0x2000   // translate address
+
+    #2030:  BNE  R30,R29,0x203C // if not iTLB miss, then we are performing dTLB miss so we jump to 0x203C
+    #2034:  TLBWRITE R5,R6,iTLB // write new TLB entry on iTLB
+    #2038:  JUMP 0x2040         // jump to routine to restore the registers value
+    #203C:  TLBWRITE R5,R6,dTLB // write new TLB entry on dTLB
+    
+    #2040:  LDW R5,0x0C(R31)    // restore the value for R5
+    #2044:  LDW R6,0x10(R31)    // restore the value for R6
+    #2048:  JUMP 0x2800         // jump to routine exit to restore missing registers
+
+#204C:  BEQ  R30,R28,0x2020     // if dTLB miss jump to 0x2020 were we have exception handler for TLB
+#2050:  ADDI R26,R26,0x6BCD     // R26 will be 0x6BCD if we have executed the trap handler for a non-TLB xcpt
+#2054:  JUMP 0x2800
+
+### Restore global registers and return back to code
+#2800:  LDW R28,0x0(R31)    // restore the value for R28
+#2804:  LDW R29,0x4(R31)    // restore the value for R29
+#2808:  LDW R30,0x8(R31)    // restore the value for R30
+#280C:  SUB R31,R31,R31     // restore the value for R31
+#2810:  IRET                // return back to src code 
+
+
+### Write R15 to note that physical address returned is ok
+#3018:  ADDI R15,R15,0x1234
+#301C:  LDW R7,0x1050(R31)
+#3020:  JUMP 0x1040
+
+#########
+What does this check: 
+    - The src code will produce a cache bus error exception when trying to LD from incorrect address.
+    - This will force the core to jump to the exception handler at address 0x2000
+        - Then, this will save the values for R28,R29,R30.
+        - Next, it will NOT hit on iTLB nor dTLB xcpt checks, and will jump to 0x2800 where it will:
+            - Write R26 with 0x6BCD to note that is a different type of xcpt.
+            - Restore the value for R28,R29,R30.
+            - Perform an IRET.
+
+    - It will then start executing from PC 0x1018, which was the instruction that caused cache bus error
+      exception. But since we returned from xcpt handler, now the privilege mode is User mode, and this 
+      means that TLB is now enabled. 
+
+    - The PC 0x1018 is sent to iTLB and it misses, this generates an iTLB exception that is propagated up 
+      to the WB stage where it forces the core to jump to the exception handler again at address 0x2000.
+      The privilege mode is then changed to Supervisor.
+        - Then, this will save the values for R28,R29,R30.
+        - Next, it will HIT on iTLB xcpt check, so it will continue without jumping to 0x2800:
+            - Saves on the main memory the value for registers R5 and R6, because we will use them to compute
+              the physical address.
+            - Reads the @ fault value from rm1 and copies it to R5. Then, it computes de physical address and
+              stores it on R6.
+            - Performs a TLBWRITE instruction targetting the iTLB.
+            - Forces the core to jump to address 0x2040:
+                - Restores the value for R5 and R6, and jumps to 0x2800 to restore all the registers value and 
+                  performs the IRET again, which returns the core to the PC 0x1018 and puts privilege mode to User.
+
+    - The core starts executing from PC 0x1018 again and it hits on iTLB, so the returned physical address is now 
+      0x3018. The core starts executing from there where we put an ADDI instruction to R15 with a value of 0x1234
+      to check that everything has been executed as expected. 
+
+    - Then, it will fetch the next instruction (virt. PC = 101C, phy PC = 0x301C), which is a LD to address 0x1050,  
+      since dTLB is empty it will generate an xcpt and will force the core to jump again to the xcpt handler (0x2000).
+
+    - Once the core is on the xcpt handler it will check which kind of xcpt has been raised, and it will generate
+      a physical address for the given virtual address that failed (virt. addr fault 0x1050, generated phy addr = 0x3050). 
+      
+    - Next, the xcpt handler will perform a TLBWRITE on the dTLB, will restore the registers value and jump back to the 
+      PC where it failed (virt. PC = 101C, phy PC = 0x301C). Then, on the next attempt it will find that data is at address
+      0x3050, and it will write the main memory content (0xABCDEF01) on R7.
+
+    - Finally, it will perform a JUMP (virt. PC = 1020, phy PC = 0x3020) to address 0x1040, which means that it will look
+      on iTLB and it will return phy addr 0x3040. It will try to fetch from there and it read NOPs.
+ 
+- If evertyhing goes as expected we should see the next values on the registers:
+        - R2  = 0x1000
+        - R5  = 0x6BCD
+        - R6  = 0x6BCD
+        - R7  = 0xABCDEF01
+        - R15 = 0x1234
+        - R28 = 0x6BCD
+        - R29 = 0x6BCD
+        - R30 = 0x6BCD
+
+Result: Works as expected 
+
