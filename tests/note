@@ -442,3 +442,48 @@ NOP
         - R4 = 0x80
 	- mem[0x1080:0x1280] = 0:127
 Result:
+///////////////////////////////////////////////////////////////////////////
+// TEST MEMORY COPY
+
+Test name: mem_copy.hex
+
+# mem[0x1080] -- initial value 0x00000000
+
+1000:  ADDI R2,R0,0x1080
+1004:  ADD  R3,R0,R0
+1008:  ADD  R4,R0,0x80
+100C:  ADD  R7,R0,0x5
+#loop
+	1010:  STW  0(R2),R7
+	1014:  ADDI R2,R2,0x4
+	1018:  ADDI R3,R3,0x1
+	101C:  BLT  R3,R4,0x1010
+1020:  ADD  R2,R0,0x1080
+1024:  ADD  R3,R0,R0
+1028:  ADDI R8,R0,0x1280
+#loop2
+	102C:  LDW  R5,0(R2)
+	1030:  STW  0(R8),R5
+	1034:  ADDI R2,R2,0x4
+	1038:  ADDI R8,R8,0x4
+	103C:  ADDI R3,R3,0x1
+	1040:  BLT  R3,R4,0x102C
+NOP
+- Code:
+int main() {
+        int a[128], b[128];
+        int i;
+        for(i = 0; i < 128; i++) a[i] = 5;
+        for(i = 0; i < 128; i++) b[i] = a[i];
+}
+- If evertyhing goes as expected we should see the next values on the registers:
+        - R0 = 0x0
+        - R2 = 0x1280
+        - R3 = 0x80
+	- R4 = 0x80
+	- R5 = 0x5
+	- R7 = 0x05
+        - R8 = 0x1480
+        - mem[0x1080:0x1280] = 5
+	- mem[0x1280:0x1492] = 5
+Result:
