@@ -6,6 +6,10 @@ module decode_top
     input   logic                           clock,
     input   logic                           reset,
 
+    input   logic                           iret_instr,
+    output  priv_mode_t                     priv_mode,
+    input   xcpt_type_t                     xcpt_type,
+
     // Stall pipeline
     input   logic                           stall_decode,
     input   logic                           flush_decode,
@@ -52,8 +56,13 @@ fetch_xcpt_t    xcpt_fetch_ff;
 `RST_EN_FF(clock, reset | flush_decode, !stall_decode, decode_xcpt_ff, decode_xcpt_next, '0)
 `RST_EN_FF(clock, reset | flush_decode, !stall_decode, xcpt_fetch_ff,  xcpt_fetch_in,    '0)
 
-assign decode_xcpt      = (stall_decode) ? decode_xcpt    : decode_xcpt_ff;
-assign xcpt_fetch_out   = (stall_decode) ? xcpt_fetch_out : xcpt_fetch_ff;
+assign decode_xcpt      = (stall_decode) ? decode_xcpt    : 
+                          (flush_decode) ? '0             : 
+                                           decode_xcpt_ff;
+
+assign xcpt_fetch_out   = (stall_decode) ? xcpt_fetch_out : 
+                          (flush_decode) ? '0             : 
+                                           xcpt_fetch_ff;
 
 /////////////////////////////////////////
 // Control logic for requests to be sent to ALU
@@ -67,8 +76,10 @@ logic [`PC_WIDTH-1:0]   req_to_alu_pc_ff;
 `RST_EN_FF(clock, reset, !stall_decode | flush_decode, req_to_alu_valid_ff, req_to_alu_valid_next, '0)
 
 //     CLK    EN            DOUT                DIN                  
-`EN_FF(clock, !stall_decode, req_to_alu_info_ff, req_to_alu_info_next)
 `EN_FF(clock, !stall_decode, req_to_alu_pc_ff,   fetch_instr_pc      )
+
+//     CLK    EN                                                             DOUT                DIN                  
+`EN_FF(clock, !stall_decode | writeEnRF | cache_data_valid | alu_data_valid, req_to_alu_info_ff, req_to_alu_info_next)
 
 
 assign req_to_alu_valid_next =  ( flush_decode      ) ? 1'b0 : // Invalidate instruction
@@ -84,6 +95,9 @@ assign req_to_alu_pc    = (stall_decode | flush_decode) ? req_to_alu_pc   : req_
 // Register file signals      
 logic [`REG_FILE_DATA_RANGE] rf_reg1_data; 
 logic [`REG_FILE_DATA_RANGE] rf_reg2_data; 
+logic [`REG_FILE_DATA_RANGE] rm0_data;
+logic [`REG_FILE_DATA_RANGE] rm1_data;
+logic [`REG_FILE_DATA_RANGE] rm2_data;
 
 /////////////////////////////////////////
 // Bypass control signals
@@ -129,11 +143,11 @@ begin
 
     // Register A value depends on the instructions being performed at the
     // alu and cache stage at this cycle, because we may need to bypass data
-    req_to_alu_info_next.ra_data = (  is_r_type_instr(alu_instr_ff.opcode)   
+    req_to_alu_info_next.ra_data = (  (is_r_type_instr(alu_instr_ff.opcode) | is_mov_instr(alu_instr_ff.opcode))
                                     & alu_instr_ff.rd_addr == fetch_instr_data[`INSTR_SRC1_ADDR_RANGE] 
                                     & alu_data_valid)                                                   ? alu_data_bypass   : // Bypass from ALU  
 
-                                   ( (is_r_type_instr(cache_instr_ff.opcode) |  is_load_instr(cache_instr_ff.opcode))
+                                   ( (is_r_type_instr(cache_instr_ff.opcode) |  is_load_instr(cache_instr_ff.opcode) | is_mov_instr(alu_instr_ff.opcode))
                                     & cache_instr_ff.rd_addr == fetch_instr_data[`INSTR_SRC1_ADDR_RANGE]  
                                     & cache_data_valid)                                                 ? cache_data_bypass : //Bypass from Cache (hit on LD req)
 
@@ -141,11 +155,11 @@ begin
 				    					    					                                          rf_reg1_data; // data from register file
 
     // Use RD to store src2
-    req_to_alu_info_next.rb_data = (  is_r_type_instr(alu_instr_ff.opcode) 
+    req_to_alu_info_next.rb_data = (  (is_r_type_instr(alu_instr_ff.opcode) | is_mov_instr(alu_instr_ff.opcode))
                                     & alu_instr_ff.rd_addr == fetch_instr_data[`INSTR_SRC2_ADDR_RANGE]
                                     & alu_data_valid)                                                       ? alu_data_bypass : // Bypass from ALU
 
-                                   (  (is_r_type_instr(cache_instr_ff.opcode) |  is_load_instr(cache_instr_ff.opcode))
+                                   (  (is_r_type_instr(cache_instr_ff.opcode) |  is_load_instr(cache_instr_ff.opcode) | is_mov_instr(alu_instr_ff.opcode))
                                      & cache_instr_ff.rd_addr == fetch_instr_data[`INSTR_SRC2_ADDR_RANGE] 
                                      & cache_data_valid)                                                    ? cache_data_bypass : //Bypass from Cache (hit on LD req)
 	
@@ -158,10 +172,10 @@ begin
     ////////////////////////////////////////////////
     // Decode instruction to determine RB or offset 
     
-    //FIXME: [Optional] Need to add MOV, TLBWRITE and IRET decoding
     // B-format
     if (  is_branch_type_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]) 
-        | is_jump_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]))  
+        | is_jump_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE])
+        | is_tlb_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE])          )  
     begin
     
         if ( is_branch_type_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]))// BEQ,BNE, BLT, BGT, BLE, BGE CASE
@@ -169,25 +183,44 @@ begin
             req_to_alu_info_next.offset = `ZX(`ALU_OFFSET_WIDTH, {fetch_instr_data[`INSTR_OFFSET_HI_ADDR_RANGE], 
                                                                   fetch_instr_data[`INSTR_OFFSET_LO_ADDR_RANGE]}); 
         end
-        else // JUMP CASE
+        else if (is_jump_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]))  // JUMP CASE
         begin
             req_to_alu_info_next.offset = `ZX(`ALU_OFFSET_WIDTH, {fetch_instr_data[`INSTR_OFFSET_HI_ADDR_RANGE], 
                                                                   fetch_instr_data[`INSTR_OFFSET_M_ADDR_RANGE], 
                                                                   fetch_instr_data[`INSTR_OFFSET_LO_ADDR_RANGE]}); 
         end
+        else //TLBWRITE
+        begin
+            req_to_alu_info_next.offset = `ZX(`ALU_OFFSET_WIDTH, fetch_instr_data[`INSTR_OFFSET_LO_ADDR_RANGE]);
+            decode_xcpt_next.xcpt_illegal_instr = (priv_mode == User) ? fetch_instr_valid & !flush_decode : 1'b0;
+        end
     end
     else
-    begin 
+    begin
+        // MOV
+        if (is_mov_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]))
+        begin
+            $display("  MOV : fetch_instr_data[`INSTR_OFFSET_LO_ADDR_RANGE] = %h  ,, req_to_alu_info_next.ra_data = %h",fetch_instr_data[`INSTR_OFFSET_LO_ADDR_RANGE],req_to_alu_info_next.ra_data);
+            // rm1 : @ fault
+            req_to_alu_info_next.ra_data = rm1_data; 
+            // rm0 : xcpt PC
+            if (fetch_instr_data[`INSTR_OFFSET_LO_ADDR_RANGE] == 9'h001)
+                req_to_alu_info_next.ra_data = rm0_data;
+            // rm2 : xcpt type
+            else if (fetch_instr_data[`INSTR_OFFSET_LO_ADDR_RANGE] == 9'h002)
+                req_to_alu_info_next.ra_data = rm2_data;
+        end
+        // IRET
+        else if (is_iret_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]))
+        begin
+             req_to_alu_info_next.ra_data = rm0_data;
+        end
+
         // Raise an exception because the instruction is not supported
-        if (  !is_r_type_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]) 
-            & !is_m_type_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE])
-            & !is_branch_type_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE])
-            & !is_jump_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE])
-            & !is_mov_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE])
-            & !is_tlb_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE])
-            & !is_iret_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE])
-            & !is_nop_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]))
-                decode_xcpt_next.xcpt_illegal_instr = !flush_decode;
+        else if (  !is_r_type_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]) 
+                 & !is_m_type_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE])
+                 & !is_nop_instr(fetch_instr_data[`INSTR_OPCODE_ADDR_RANGE]))
+                     decode_xcpt_next.xcpt_illegal_instr = fetch_instr_valid & !flush_decode;
     end
 end
 
@@ -214,6 +247,13 @@ registerFile
     .clock      ( clock         ),
     .reset      ( reset         ),
 
+    // Internal register values
+    .iret_instr ( iret_instr    ),
+    .priv_mode  ( priv_mode     ),
+    .rm0_data   ( rm0_data      ),
+    .rm1_data   ( rm1_data      ),
+    .rm2_data   ( rm2_data      ),
+
     // Read port
     .src1_addr  ( src1_addr     ),
     .src2_addr  ( src2_addr     ),
@@ -228,7 +268,8 @@ registerFile
     // Exception input
     .xcpt_valid ( xcpt_valid    ),
     .rmPC	    ( rmPC          ),
-    .rmAddr     ( rmAddr        )
+    .rmAddr     ( rmAddr        ),
+    .xcpt_type  ( xcpt_type     )
 );
 
 `ifdef VERBOSE_DECODE

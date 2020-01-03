@@ -25,33 +25,57 @@ module wb_top
 
     // Exceptions values to be stored on the RF
     output  logic 				                xcpt_valid,
+    output  xcpt_type_t                         xcpt_type,
     output  logic [`PC_WIDTH_RANGE] 		    rmPC,
-    output  logic [`REG_FILE_XCPT_ADDR_RANGE] 	rmAddr
+    output  logic [`REG_FILE_XCPT_ADDR_RANGE] 	rmAddr,
+
+    // Request from cache stage 
+    input   logic                               cache_tlb_req_valid,
+    input   logic                               cache_tlb_id,
+    input   tlb_req_info_t                      cache_tlb_req_info,
+
+    // Request from WB to TLB
+    output  logic                               new_tlb_entry,
+    output  logic                               new_tlb_id,
+    output  tlb_req_info_t                      new_tlb_info
 );
 
+////////////////////////////
+// TLB new entry request
+always_comb
+begin
+    new_tlb_entry   = cache_tlb_req_valid;
+    new_tlb_id      = cache_tlb_id;
+    new_tlb_info    = cache_tlb_req_info;
+end
 
+///////////////////////////
 // Exception priorities
 always_comb
 begin
-    xcpt_valid = 1'b0;
-    rmAddr     = '0;
-    rmPC       = '0;
+    xcpt_valid  = 1'b0;
+    xcpt_type   = reserved;
+    rmAddr      = '0;
+    rmPC        = '0;
 
     if (  xcpt_fetch.xcpt_itlb_miss 
         | xcpt_fetch.xcpt_bus_error )
     begin
         xcpt_valid  = 1'b1;
+        xcpt_type   = (xcpt_fetch.xcpt_itlb_miss) ? iTlb_miss : fetch_bus_error;
         rmPC        = xcpt_fetch.xcpt_pc; 
         rmAddr      = xcpt_fetch.xcpt_addr_val;
     end
     else if (xcpt_decode.xcpt_illegal_instr)
     begin
         xcpt_valid  = 1'b1;
+        xcpt_type   = illegal_instr;
         rmPC        = xcpt_decode.xcpt_pc;
     end
     else if (xcpt_alu.xcpt_overflow)
     begin
         xcpt_valid  = 1'b1;
+        xcpt_type   = overflow;
         rmPC        = xcpt_alu.xcpt_pc;
     end
     else if (  xcpt_cache.xcpt_addr_fault 
@@ -59,11 +83,15 @@ begin
              | xcpt_cache.xcpt_bus_error)
     begin
         xcpt_valid  = 1'b1;
+        xcpt_type   = ( xcpt_cache.xcpt_addr_fault ) ? cache_addr_fault :
+                      ( xcpt_cache.xcpt_dtlb_miss  ) ? dTlb_miss        :
+                                                       cache_bus_error;  
         rmPC        = xcpt_cache.xcpt_pc;
         rmAddr      = xcpt_cache.xcpt_addr_val;
     end
 end
 
+////////////////////////////
 // RF write requests
 always_comb
 begin

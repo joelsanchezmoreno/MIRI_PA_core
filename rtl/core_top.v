@@ -52,6 +52,9 @@ logic   [`PC_WIDTH_RANGE]       req_to_alu_pc;
 fetch_xcpt_t                    xcpt_fetch_to_alu;
 decode_xcpt_t                   xcpt_decode_to_alu;
 
+// Privilege mode
+priv_mode_t                     priv_mode;
+
 /////////////////////////////////////////
 // ALU signals to other stages
 
@@ -75,12 +78,18 @@ logic                           alu_data_valid;
 // the requests sent to decode stage and alu stage next cycle
 // and we have to fetch another instruction instead of pc+4
 logic                       alu_take_branch; // from ALU to fetch  
+logic                       alu_iret_instr; // from ALU to RF  
 logic   [`PC_WIDTH-1:0]     alu_branch_pc;
 
 // Exception signals
 fetch_xcpt_t                    xcpt_fetch_to_cache;
 decode_xcpt_t                   xcpt_decode_to_cache;
 alu_xcpt_t                      xcpt_alu_to_cache;
+
+// Request from ALU to cache for TLB write
+logic                               alu_to_dcache_tlb_req_valid;
+logic                               alu_to_dcache_tlb_id;
+tlb_req_info_t                      alu_to_dcache_tlb_req_info;
 
 /////////////////////////////////////////
 // Data cache signals to other stages
@@ -105,6 +114,11 @@ logic                               dcache_write_rf;
 logic [`REG_FILE_ADDR_RANGE]        dcache_dest_rf;
 logic [`DCACHE_MAX_ACC_SIZE-1:0]    dcache_rsp_data;
 
+// Request from cache to WB for TLB write
+logic                               dcache_to_wb_tlb_req_valid;
+logic                               dcache_to_wb_tlb_id;
+tlb_req_info_t                      dcache_to_wb_tlb_req_info;
+
 /////////////////////////////////////////
 // WriteBack signals to other stages
 
@@ -113,8 +127,13 @@ logic 				                wb_writeEnRF;
 logic [`REG_FILE_ADDR_RANGE]    	wb_destRF;
 
 logic                               wb_xcpt_valid;
+xcpt_type_t                         wb_xcpt_type;
 logic [`PC_WIDTH_RANGE] 		    wb_rmPC;
 logic [`REG_FILE_XCPT_ADDR_RANGE] 	wb_rmAddr;
+
+logic                               wb_new_tlb_entry;
+logic                               wb_new_tlb_id; // 0 for iTLB; 1 for dTLB
+tlb_req_info_t                      wb_new_tlb_info;
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -135,6 +154,7 @@ fetch_top
     .reset              ( reset                 ),
 
     .boot_addr          ( boot_addr             ),
+    .priv_mode          ( priv_mode             ),
 
     // Exception
     .xcpt_fetch         ( xcpt_fetch_to_decode  ),
@@ -162,7 +182,12 @@ fetch_top
     .rsp_bus_error      ( !rsp_cache_id &
                           rsp_bus_error         ),
     .rsp_valid_miss     ( !rsp_cache_id & 
-                           rsp_valid_miss       )
+                           rsp_valid_miss       ),
+
+    // New TLB entry
+    .new_tlb_entry      (  wb_new_tlb_entry 
+                         & !wb_new_tlb_id       ),
+    .new_tlb_info       ( wb_new_tlb_info       )
 );                
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -178,6 +203,8 @@ decode_top
     // System signals
     .clock              ( clock                 ),
     .reset              ( reset                 ),
+    .priv_mode          ( priv_mode             ),
+    .iret_instr         ( alu_iret_instr        ),
 
     // Stall pipeline
     .stall_decode       (  alu_busy
@@ -210,6 +237,7 @@ decode_top
     .xcpt_valid         ( wb_xcpt_valid         ),
     .rmPC               ( wb_rmPC               ),
     .rmAddr             ( wb_rmAddr             ),
+    .xcpt_type          ( wb_xcpt_type          ),
 
     // Bypasses
     .alu_data_bypass    ( alu_data_bypass       ),
@@ -263,12 +291,23 @@ alu_top
     // Branch signals to fetch stage
     .branch_pc          ( alu_branch_pc             ),
     .take_branch        ( alu_take_branch           ),
- 
+    .iret_instr         ( alu_iret_instr            ),
+
     //Bypass
     .alu_data_bypass    ( alu_data_bypass           ),
     .alu_data_valid     ( alu_data_valid            ),
     .cache_data_bypass  ( dcache_data_bypass        ),
-    .cache_data_bp_valid( dcache_data_bp_valid      )
+    .cache_data_bp_valid( dcache_data_bp_valid      ),
+   
+    // Write requests to the Register File from WB stage 
+    .writeValRF         ( wb_writeValRF             ), 
+    .writeEnRF          ( wb_writeEnRF              ), 
+    .destRF             ( wb_destRF                 ),
+
+    // Request to cache stage to propagate TLB write request
+    .tlb_req_valid      ( alu_to_dcache_tlb_req_valid   ),
+    .tlb_id             ( alu_to_dcache_tlb_id          ),
+    .tlb_req_info       ( alu_to_dcache_tlb_req_info    )
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -287,6 +326,7 @@ cache_top
     // Control signals
     .dcache_ready   ( dcache_ready          ), 
     .flush_cache    ( wb_xcpt_valid         ),
+    .priv_mode      ( priv_mode             ),
 
     //Exceptions
     .xcpt_fetch_in   ( xcpt_fetch_to_cache  ),
@@ -321,10 +361,26 @@ cache_top
 
     // Response from the memory hierarchy
     .rsp_data_miss  ( rsp_data_miss         ),
-    .rsp_bus_error  ( rsp_cache_id &
-                      rsp_bus_error         ),   
-    .rsp_valid_miss ( rsp_cache_id & 
-                      rsp_valid_miss        )
+    .rsp_bus_error  (   rsp_cache_id 
+                      & rsp_bus_error       ),   
+    .rsp_valid_miss (   rsp_cache_id  
+                      & rsp_valid_miss      ),
+
+ ///// TLB ports
+    // Request from ALU stage
+    .alu_tlb_req_valid      ( alu_to_dcache_tlb_req_valid   ),
+    .alu_tlb_id             ( alu_to_dcache_tlb_id          ),
+    .alu_tlb_req_info       ( alu_to_dcache_tlb_req_info    ),
+
+    // Request to WB stage
+    .tlb_to_wb_req_valid    ( dcache_to_wb_tlb_req_valid    ),
+    .tlb_to_wb_id           ( dcache_to_wb_tlb_id           ),
+    .tlb_to_wb_req_info     ( dcache_to_wb_tlb_req_info     ),
+
+    // Request from WB stage to add a new entry
+    .new_tlb_entry          (  wb_new_tlb_entry 
+                             & wb_new_tlb_id                ),
+    .new_tlb_info           ( wb_new_tlb_info               )                      
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -357,9 +413,20 @@ wb_top
     .req_to_RF_dest         ( wb_destRF             ),
 
     // Exceptions values to be stored on the RF
-    .xcpt_valid             ( wb_xcpt_valid        ),
-    .rmPC                   ( wb_rmPC              ),
-    .rmAddr                 ( wb_rmAddr            )
+    .xcpt_valid             ( wb_xcpt_valid         ),
+    .xcpt_type              ( wb_xcpt_type          ),
+    .rmPC                   ( wb_rmPC               ),
+    .rmAddr                 ( wb_rmAddr             ),
+
+    // Request from cache stage
+    .cache_tlb_req_valid    ( dcache_to_wb_tlb_req_valid  ),
+    .cache_tlb_id           ( dcache_to_wb_tlb_id         ),
+    .cache_tlb_req_info     ( dcache_to_wb_tlb_req_info   ),
+
+    // Request from WB to TLB
+    .new_tlb_entry          ( wb_new_tlb_entry      ),
+    .new_tlb_id             ( wb_new_tlb_id         ), 
+    .new_tlb_info           ( wb_new_tlb_info       ) 
 );
 
 endmodule

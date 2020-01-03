@@ -7,6 +7,7 @@ module fetch_top
     input   logic                               reset,
 
     input   logic   [`PC_WIDTH-1:0]             boot_addr,
+    input   priv_mode_t                         priv_mode,
     
     // Exception
     output  fetch_xcpt_t                        xcpt_fetch,
@@ -30,11 +31,29 @@ module fetch_top
     // Response from the memory hierarchy
     input   logic [`ICACHE_LINE_WIDTH-1:0]      rsp_data_miss,
     input   logic                               rsp_bus_error,
-    input   logic                               rsp_valid_miss
+    input   logic                               rsp_valid_miss,
+
+    // New entry for iTLB
+    input   logic                               new_tlb_entry,
+    input   tlb_req_info_t                      new_tlb_info
  );
 
 /////////////////////////////////////////
 // Signals
+logic                                   mm_pendent_rsp;
+logic                                   mm_pendent_rsp_ff;
+
+//         CLK    RST    DOUT             DIN          DEF
+`RST_FF(clock, reset, mm_pendent_rsp_ff, mm_pendent_rsp, 1'b0)
+always_comb
+begin
+    mm_pendent_rsp = mm_pendent_rsp_ff;
+    if(req_valid_miss)
+        mm_pendent_rsp = 1'b1;
+    else if (rsp_valid_miss)
+        mm_pendent_rsp = 1'b0;
+end
+
 logic icache_ready;
 
 // Response from the Instruction Cache
@@ -43,6 +62,9 @@ logic [`ICACHE_LINE_WIDTH-1:0]          icache_rsp_data;
 logic [`ICACHE_INSTR_IN_LINE_WIDTH-1:0] word_in_line;
 logic [`INSTR_WIDTH-1:0]                decode_instr_data_next;
 
+// Response from iTLB
+logic                   iTlb_rsp_valid;
+logic [`PHY_ADDR_RANGE] iTlb_rsp_phy_addr;
 
 /////////////////////////////////////////
 // Branches
@@ -72,7 +94,7 @@ logic                   program_counter_update;
 //         CLK    RST    EN                      DOUT             DIN                   DEF
 `RST_EN_FF(clock, reset, program_counter_update, program_counter, program_counter_next, boot_addr)
 
-assign program_counter_update   = ( stall_fetch | !icache_ready | !icache_rsp_valid) ? 1'b0 : 1'b1;
+assign program_counter_update   = ( stall_fetch | !icache_ready | mm_pendent_rsp) ? 1'b0 : 1'b1;
 assign program_counter_next     = ( take_branch     & icache_ready ) ? branch_pc    : 
                                   ( take_branch_ff  & icache_ready ) ? branch_pc_ff :
                                                                        program_counter + 4;
@@ -81,20 +103,20 @@ assign program_counter_next     = ( take_branch     & icache_ready ) ? branch_pc
 /////////////////////////////////////////
 // Exceptions
 logic xcpt_bus_error_aux;
+logic xcpt_itlb_miss;
 
 always_comb
 begin
-    xcpt_fetch.xcpt_itlb_miss   = '0; //FIXME: connect to iTLB
+    xcpt_fetch.xcpt_itlb_miss   = xcpt_itlb_miss;
     xcpt_fetch.xcpt_bus_error   = xcpt_bus_error_aux;
     xcpt_fetch.xcpt_addr_val    = program_counter;
     xcpt_fetch.xcpt_pc          = program_counter;
 end
-
 /////////////////////////////////////////                                                
-// Request to the Instruction Cache
-logic icache_req_valid;
-logic icache_req_valid_ff;
-logic icache_req_valid_next;
+// Request to the Instruction TLB
+logic itlb_req_valid;
+logic itlb_req_valid_ff;
+logic itlb_req_valid_next;
 logic first_req_sent,first_req_sent_ff;
 
 //         CLK    RST    EN                  DOUT               DIN              DEF
@@ -110,19 +132,27 @@ begin
     first_req_sent = first_req_sent_ff;
     if (program_counter == `CORE_BOOT_ADDRESS & !first_req_sent_ff)
     begin
-        icache_req_valid_next = 1'b1;
-        first_req_sent        = 1'b1;
+        itlb_req_valid_next     = 1'b1;
+        first_req_sent          = 1'b1;
     end
     else
-        icache_req_valid_next = program_counter_update | (stall_fetch_ff & !stall_fetch);
+        itlb_req_valid_next = program_counter_update;
 end
 
 //      CLK    RST    DOUT                 DIN                    DEF
-`RST_FF(clock, reset, icache_req_valid_ff, icache_req_valid_next, 1'b0)
+`RST_FF(clock, reset, itlb_req_valid_ff, itlb_req_valid_next, 1'b0)
 
+
+assign itlb_req_valid = (stall_fetch)    ? 1'b0 :
+                        (stall_fetch_ff) ? 1'b1 : // !stall_fetch & stall_fetch_ff
+                                           itlb_req_valid_ff;
+
+/////////////////////////////////////////                                                
+// Request to the Instruction Cache
+logic icache_req_valid;
 
 assign icache_req_valid = (stall_fetch) ? 1'b0 :
-                                          icache_req_valid_ff;
+                                          iTlb_rsp_valid & !xcpt_itlb_miss;
 
 /////////////////////////////////////////
 // Fetch to Decode
@@ -166,7 +196,7 @@ icache(
     
     // Request from the core pipeline
     .req_valid          ( icache_req_valid  ),
-    .req_addr           ( program_counter   ),
+    .req_addr           ( iTlb_rsp_phy_addr ),
 
     // Response to the core pipeline
     .rsp_valid          ( icache_rsp_valid  ),
@@ -183,9 +213,9 @@ icache(
 );
 
 
-/*
-//FIXME: Create module
-instruction_tlb
+logic tlb_write_privilege;
+
+tlb_cache
 itlb
 (
     // System signals
@@ -193,22 +223,21 @@ itlb
     .reset              ( reset             ),
 
     // Request from the core pipeline
-    .req_valid          (                   ),
-    .req_addr           (                   ),
+    .req_valid          ( itlb_req_valid    ),
+    .req_virt_addr      ( program_counter   ),
+    .priv_mode          ( priv_mode         ),
 
-    // Response to the core pipeline
-    .rsp_valid          (                   ),
-    .rsp_data           (                   ),
+    // Response to the cache
+    .rsp_valid          ( iTlb_rsp_valid    ), 
+    .tlb_miss           ( xcpt_itlb_miss    ), 
+    .rsp_phy_addr       ( iTlb_rsp_phy_addr ), 
+    .writePriv          (tlb_write_privilege), //unused for Icache
     
-    // Request to the memory hierarchy
-    .req_addr_miss      (                   ),
-    .req_valid_miss     (                   ),
-                    
-    // Response from the memory hierarchy
-    .rsp_data_miss      (                   ),
-    .rsp_valid_miss     (                   )
+    // Write request from the O.S
+    .new_tlb_entry      ( new_tlb_entry     ),
+    .new_tlb_info       ( new_tlb_info      )
 );
-*/
+
 
 /////////////////////////////////////////
 // Verbose
