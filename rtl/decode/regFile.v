@@ -32,8 +32,8 @@ module regFile
 );
 
 // FF to store the registers data
-logic [`REG_FILE_DATA_RANGE][`REG_FILE_NUM_REGS_RANGE]regMem     ;
-logic [`REG_FILE_DATA_RANGE][`REG_FILE_NUM_REGS_RANGE]regMem_ff  ;
+logic [`REG_FILE_NUM_REGS_RANGE][`REG_FILE_DATA_RANGE]regMem     ;
+logic [`REG_FILE_NUM_REGS_RANGE][`REG_FILE_DATA_RANGE]regMem_ff  ;
 
 // Exception PC
 logic [`REG_FILE_DATA_RANGE] rm0;

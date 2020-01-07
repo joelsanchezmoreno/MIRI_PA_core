@@ -96,7 +96,7 @@
 `define INSTR_B_OFFSET_RANGE `INSTR_B_OFFSET_WIDTH-1:0
 
 //////////////////////
-// ALU defines
+// ALU/MUL defines
 ///////////////////////
 
 `define ALU_OFFSET_WIDTH    `MAX(`INSTR_M_OFFSET_WIDTH, \
@@ -107,6 +107,8 @@
 `define ALU_MUL_LATENCY         5
 `define ALU_MUL_LATENCY_WIDTH   $clog2(`ALU_MUL_LATENCY)
 `define ALU_MUL_LATENCY_RANGE   `ALU_MUL_LATENCY_WIDTH-1:0
+
+`define MUL_STAGES              (`ALU_MUL_LATENCY - 3)
 
 // Overflow computation
 `define ALU_OVW_DATA_WIDTH      (`REG_FILE_DATA_WIDTH*2)
@@ -225,5 +227,18 @@
 `define GET_UPPER_BOUND(req_size,req_offset) (req_size*req_offset+req_size)
 `define GET_LOWER_BOUND(req_size,req_offset) (req_size*req_offset)
 
+
+///////////////////////
+// Reorder buffer defines
+///////////////////////
+
+`define ROB_NUM_ENTRIES         8
+`define ROB_NUM_ENTRIES_RANGE   `ROB_NUM_ENTRIES-1:0
+
+`define ROB_NUM_ENTRIES_WIDTH   $clog2(`ROB_NUM_ENTRIES)
+`define ROB_NUM_ENTRIES_W_RANGE `ROB_NUM_ENTRIES_WIDTH-1:0
+
+`define ROB_ID_WIDTH            `ROB_NUM_ENTRIES_WIDTH
+`define ROB_ID_RANGE            `ROB_ID_WIDTH-1:0
 
 `endif // _CORE_DEFINES_

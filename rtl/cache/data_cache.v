@@ -220,6 +220,7 @@ begin
                 begin
                     //FIXME.TODO. Merge requests if there are more on the store buffer
                     //            with same tag?
+                    rsp_valid = 1'b1;
                     store_buffer_push_info.addr = req_info.addr;
                     store_buffer_push_info.way  = hit_way;
                     store_buffer_push_info.size = req_info.size;

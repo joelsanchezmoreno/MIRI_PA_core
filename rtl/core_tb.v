@@ -58,9 +58,6 @@ core_top
     // Boot address
     .boot_addr              ( `CORE_BOOT_ADDRESS    ),
 
-    // Exception address
-    .xcpt_addr              ( `CORE_XCPT_ADDRESS    ),
-
     // Request from I$ to the memory hierarchy
     .dcache_req_valid_miss  ( dcache_req_valid_miss ),
     .dcache_req_info_miss   ( dcache_req_info_miss  ),

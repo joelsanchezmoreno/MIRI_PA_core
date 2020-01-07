@@ -5,18 +5,20 @@ Test name: multiple_ld_st_test.hex
 
 # mem[0x1008+0x30] -- initial value 0xCBAE05FA
 
-    ADDI R0,R0,0x7
-    ADDI R1,R1,0x3
-    ADD  R2,R0,R1 
-    ADDI R3,R3,0x1008   
-    LDW  R5,0x30(R3)  
-    STW  0x30(R3),R2  # mem[0x1008+0x30] = 0x0000 0000A
-    LDW  R4,0x30(R3)  # R4 = mem[0x1008+0x30]
-    ADD  R5,R5,R4     # R5 = R5 + R4 =  0xCBAE05FA + 0xA = 0xCBAE0604  
-    STB  0x32(R3),R1  # mem[0x1008+0x30] = 0x0003 000A
-    STB  0x31(R3),R0  # mem[0x1008+0x30] = 0x0003 070A
-    STW  0x4C(R3),R2  # mem[0x1008+0x4C] = 0x0000 000A
-    STW  0x68(R3),R3  # mem[0x1008+0x68] = 0x0000 1008
+1000:   ADDI R0,R0,0x7
+1004    ADDI R1,R1,0x3
+1008    ADD  R2,R0,R1 
+100C    ADDI R3,R3,0x1008   
+
+1010    LDW  R5,0x30(R3)  # R5 = 0xCBAE05FA
+1014    STW  0x30(R3),R2  # mem[0x1008+0x30] = 0x0000 0000A
+1018    LDW  R4,0x30(R3)  # R4 = mem[0x1008+0x30]
+101C    ADD  R5,R5,R4     # R5 = R5 + R4 =  0xCBAE05FA + 0xA = 0xCBAE0604  
+
+1020    STB  0x32(R3),R1  # mem[0x1008+0x30] = 0x0003 000A
+1024    STB  0x31(R3),R0  # mem[0x1008+0x30] = 0x0003 070A
+1028    STW  0x4C(R3),R2  # mem[0x1008+0x4C] = 0x0000 000A
+102C    STW  0x68(R3),R3  # mem[0x1008+0x68] = 0x0000 1008
     
 What does this check: 
     - Initialize memory (0x1038) to 0xCBAE05FA 
@@ -53,26 +55,28 @@ Test name: multiple_branches.hex
 # mem[0x1080] -- initial value 0x00000000
 
 Next to be tested: branches
-1000:   ADDI R0,R0,0x1080       # @data  
-1004:   ADDI R1,R1,0x0          # iter
-1008:   ADDI R2,R2,0x2          # num iterations - 1
-100C:   ADDI R4,R4,0xEDA
-1010:   BEQ  R5,R4,0x10F0       # jump to NOPs as we have finished
+1000:   ADDI R0,R0,0x1080   # @data  
+1004:   ADDI R1,R1,0x0      # iter
+1008:   ADDI R2,R2,0x2      # num iter - 1
+100C:   ADDI R4,R4,0xEDA    
+1010:   BEQ  R5,R4,0x10F0   # jump to NOPs as we have finished
 
-#loop
-    1014:   BGT R1,R2,0x102C
-    1018:   LDW R3,0(R0)
-    101C:   ADD R3,R3,R2
-    1020:   STB 0(R0),R3
-    1024:   ADDI R1,R1,0x1
-    1028:   JUMP 0x1014
+                            instr. ID per iteration
+                            #iter   0   1   2   3
+#loop                             
+    1014:   BGT R1,R2,0x102C        5   3   1   7
+    1018:   LDW R3,0(R0)            6   4   2
+    101C:   ADD R3,R3,R2            7   5   3
+    1020:   STB 0(R0),R3            0   6   4
+    1024:   ADDI R1,R1,0x1          1   7   5
+    1028:   JUMP 0x1014             2   0   6
 
-102C:   BLT R1,R2,0x103C
-    1030:   STW 0x4(R0),R4
-    1034:   ADDI R5,R5,0xEDA
-    1038:   JUMP 0x1010
+102C:   BLT R1,R2,0x103C            0
+    1030:   STW 0x4(R0),R4          1
+    1034:   ADDI R5,R5,0xEDA        2
+    1038:   JUMP 0x1010             3
 
-103C:   ADDI R5,R5,0xFEA
+103C:   ADDI R5,R5,0xFEA            4
         NOP
     
 What does this check: 
@@ -109,20 +113,22 @@ Next to be tested: branches
 100C:   ADDI R4,R4,0xEDA
 1010:   BEQ  R5,R4,0x10F0       # jump to NOPs as we have finished
 
+                                instr. ID per iteration
+                                #iter   0   1   2   3
 #loop
-    1014:   BGT R1,R2,0x102C
-    1018:   LDW R3,0(R0)
-    101C:   MUL R3,R3,R2
-    1020:   STB 0(R0),R3
-    1024:   ADDI R1,R1,0x1
-    1028:   JUMP 0x1014
+    1014:   BGT R1,R2,0x102C            5   3   1   7  
+    1018:   LDW R3,0(R0)                6   4   2
+    101C:   MUL R3,R3,R2                7   5   3
+    1020:   STB 0(R0),R3                0   6   4
+    1024:   ADDI R1,R1,0x1              1   7   5
+    1028:   JUMP 0x1014                 2   0   6
 
-102C:   BLT R1,R2,0x103C
-    1030:   STW 0x4(R0),R4
-    1034:   ADDI R5,R5,0xEDA
-    1038:   JUMP 0x1010
+102C:   BLT R1,R2,0x103C                0
+    1030:   STW 0x4(R0),R4              1
+    1034:   ADDI R5,R5,0xEDA            2
+    1038:   JUMP 0x1010                 3
 
-103C:   ADDI R5,R5,0xFEA
+103C:   ADDI R5,R5,0xFEA                4
         NOP
     
 What does this check: 
@@ -171,7 +177,7 @@ Test name: xcpt_illegal_instruction.hex
 What does this check: 
     - Initialize memory (0x1038) to 0xCBAE05FA 
     - This test is the same as the one above for LD and ST, but here we have written 
-      memory address position 0x200 with an ADDI instruction for R30 with a value of 
+      memory address position 0x2000 with an ADDI instruction for R30 with a value of 
       0x7DA1. 
     - An illegal instruction will raise after last STW is executed since the fetch will 
       start reading memory positions with incorrect opcodes. This will cause the WB stage
@@ -200,15 +206,16 @@ Test name: xcpt_mul_overflow.hex
 
 # mem[0x2000] -- initial value 0x07EF7DA1
 
-    ADDI R0,R0,0x7FFF
-    MUL  R0,R0,R0
-    ADDI R1,R1,0x7FFF
-    MUL  R1,R1,R1
-    MUL  R2,R0,R1 
+1000:   ADDI R0,R0,0x7FFF       0
+1004:   MUL  R0,R0,R0           1
+1008:   ADDI R1,R1,0x7FFF       2
+100C:   MUL  R1,R1,R1           3
+1010:   MUL  R2,R0,R1           4
+
+2000:   ADDI R30,R30,0x7DA1     5
     
 What does this check: 
-    - We have written memory address position 0x200 with an ADDI instruction for 
-      ADDI R30,R30,0x7DA1. 
+    - We have written memory address position 0x200 with an ADDI instruction.
     - The MUL will raise an overflow exception. Then, a branch to adress 0x2000 will be taken.
  
 - If evertyhing goes as expected we should see the next values on the registers:
@@ -225,22 +232,23 @@ Test name: xcpt_add_overflow.hex
 
 # mem[0x2000] -- initial value 0x07EF7DA1
 
-    ADDI R0,R0,0x7FFF
-    MUL  R0,R0,R0
-    ADD  R0,R0,R0
-    ADD  R0,R0,R0
-    ADD  R0,R0,R0
+1000:   ADDI R0,R0,0x7FFF       0
+1004:   MUL  R0,R0,R0           1
+1008:   ADD  R0,R0,R0           2
+100C:   ADD  R0,R0,R0           3
+1010:   ADD  R0,R0,R0           4
+
+2000:   ADDI R30,R30,0x7DA1     5
     
 What does this check: 
-    - We have written memory address position 0x200 with an ADDI instruction for 
-      ADDI R30,R30,0x7DA1. 
+    - We have written memory address position 0x200 with an ADDI instruction  
     - The third ADD will raise an overflow exception. Then, a branch to adress 0x2000 will be taken.
  
 - If evertyhing goes as expected we should see the next values on the registers:
         - R0 = 0xFFFC0004
         - R30 = 0x7DA1
 
-Result: All working as expected
+Result: 
 
 ///////////////////////////////////////////////////////////////////////////
 // EXCEPTIONS ADDI OVERFLOW
@@ -261,7 +269,7 @@ What does this check:
         - R0 = 0xFFFFFFFF
         - R30 = 0x7DA1
 
-Result: All working as expected
+Result:                        
 
 ///////////////////////////////////////////////////////////////////////////
 // EXCEPTIONS CACHE BUS ERROR
@@ -283,7 +291,7 @@ What does this check:
         - R0 = 0xFFFFFFFF
         - R30 = 0x7DA1
 
-Result: All working as expected
+Result:                        
 
 ///////////////////////////////////////////////////////////////////////////
 // Exception handler testing with cache bus error
@@ -399,5 +407,5 @@ What does this check:
         - R29 = 0x6BCD
         - R30 = 0x6BCD
 
-Result: Works as expected 
+Result:                   
 

@@ -70,11 +70,8 @@ logic [`ICACHE_WAYS_PER_SET_RANGE]  miss_icache_way_ff;
 logic icache_ready_next, icache_ready_ff;
 assign icache_ready = icache_ready_next;
 
-//      CLK    DOUT          DIN               
-//`FF(clock, icache_ready, icache_ready_next)
-
 //      CLK    RST    DOUT            DIN              DEF
-`RST_FF(clock, reset, icache_ready_ff, icache_ready_next, 1'b1)
+`RST_FF(clock, reset, icache_ready_ff, icache_ready_next, 1'b0)
 
 logic pendent_req,pendent_req_ff;
 

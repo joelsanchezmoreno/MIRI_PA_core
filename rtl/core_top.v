@@ -9,9 +9,6 @@ module core_top
     // Boot address
     input   logic   [`PC_WIDTH-1:0]                 boot_addr,
 
-    // Exception address
-    input   logic   [`PC_WIDTH-1:0]                 xcpt_addr,
-    
     // Request from D$ to the memory hierarchy
     output  logic                                   dcache_req_valid_miss,
     output  memory_request_t                        dcache_req_info_miss,
@@ -40,100 +37,122 @@ logic   [`PC_WIDTH_RANGE]   decode_instr_pc;
 
 // Exception signals
 fetch_xcpt_t                xcpt_fetch_to_decode;
+/////////////////////////////////////////
 
 /////////////////////////////////////////
 // Decode signals to other stages
 
+// Request to ALU
 logic                           req_to_alu_valid;
 alu_request_t                   req_to_alu_info;
+logic   [`ROB_ID_RANGE]         req_to_alu_instr_id;
 logic   [`PC_WIDTH_RANGE]       req_to_alu_pc;
-
-// Exception signals
 fetch_xcpt_t                    xcpt_fetch_to_alu;
 decode_xcpt_t                   xcpt_decode_to_alu;
+
+// Request to MUL
+logic                           req_to_mul_valid;
+mul_request_t                   req_to_mul_info;
+logic   [`ROB_ID_RANGE]         req_to_mul_instr_id;
+logic   [`PC_WIDTH_RANGE]       req_to_mul_pc;
+fetch_xcpt_t                    xcpt_fetch_to_mul;
+decode_xcpt_t                   xcpt_decode_to_mul;
 
 // Privilege mode
 priv_mode_t                     priv_mode;
 
 /////////////////////////////////////////
-// ALU signals to other stages
-
-logic [`PC_WIDTH_RANGE]         req_to_dcache_pc;
-logic alu_busy;
-
-// Connected to cache stage
-logic [`REG_FILE_ADDR_RANGE]    load_dst_reg;
-dcache_request_t                req_to_dcache_info;
-logic                           req_to_dcache_valid;
-logic                           req_to_dcache_mem_inst;
-logic                           req_to_dcache_int_inst;
-
-// Bypass signal
-logic [`REG_FILE_DATA_RANGE]    alu_data_bypass;
-logic                           alu_data_valid;
-
-// Branches signals
-
-// We take a branch on the fetch stage so we have to cancel 
-// the requests sent to decode stage and alu stage next cycle
-// and we have to fetch another instruction instead of pc+4
-logic                       alu_take_branch; // from ALU to fetch  
-logic                       alu_iret_instr; // from ALU to RF  
-logic   [`PC_WIDTH-1:0]     alu_branch_pc;
-
-// Exception signals
-fetch_xcpt_t                    xcpt_fetch_to_cache;
-decode_xcpt_t                   xcpt_decode_to_cache;
-alu_xcpt_t                      xcpt_alu_to_cache;
-
-// Request from ALU to cache for TLB write
-logic                               alu_to_dcache_tlb_req_valid;
-logic                               alu_to_dcache_tlb_id;
-tlb_req_info_t                      alu_to_dcache_tlb_req_info;
 
 /////////////////////////////////////////
-// Data cache signals to other stages
+// MUL signals to other stages
+
+// Stall the pipeline
+logic mul_stall_pipeline;
+
+// Request to WB
+logic                           mul_req_to_wb_valid;
+writeback_request_t             mul_req_to_wb_info;
+
+// Signals for bypass with Reorder buffer
+logic [`ROB_ID_RANGE]           rob_mul_src1_id;
+logic [`ROB_ID_RANGE]           rob_mul_src2_id;
+logic                           rob_mul_src1_hit;
+logic                           rob_mul_src2_hit;
+logic [`REG_FILE_DATA_RANGE]    rob_mul_src1_data;
+logic [`REG_FILE_DATA_RANGE]    rob_mul_src2_data;
+
+/////////////////////////////////////////
+// ALU signals to other stages
+
+logic alu_stall_pipeline;
+
+// Request to WB stage
+logic                           alu_req_wb_valid;
+writeback_request_t             alu_req_wb_info;
+logic                           alu_req_wb_mem_blocked;
+dcache_request_t                alu_req_wb_dcache_info;
+
+// Request to cache stage
+dcache_request_t                alu_req_to_dcache_info;
+logic                           alu_req_to_dcache_valid;
+
+// Branch signals
+logic                           alu_take_branch; // from ALU to fetch  
+logic                           alu_iret_instr; // from ALU to RF  
+logic   [`PC_WIDTH-1:0]         alu_branch_pc;
+
+// Signals to RoB
+logic                           alu_cache_stage_free;
+
+// Signals for bypass with Reorder buffer
+logic [`ROB_ID_RANGE]           rob_alu_src1_id;
+logic [`ROB_ID_RANGE]           rob_alu_src2_id;
+logic                           rob_alu_src1_hit;
+logic                           rob_alu_src2_hit;
+logic [`REG_FILE_DATA_RANGE]    rob_alu_src1_data;
+logic [`REG_FILE_DATA_RANGE]    rob_alu_src2_data;
+/////////////////////////////////////////
+
+/////////////////////////////////////////
+// Cache signals to other stages
 
 logic dcache_ready;
 
-// Exceptions
-fetch_xcpt_t                    xcpt_fetch_to_wb;
-decode_xcpt_t                   xcpt_decode_to_wb;
-cache_xcpt_t                    xcpt_cache_to_wb;
-alu_xcpt_t                      xcpt_alu_to_wb;
+// Request to WB
+logic                            cache_req_to_wb_valid;
+writeback_request_t              cache_req_to_wb_info;
 
-// Program counter value
-logic [`PC_WIDTH_RANGE]             dcache_to_wb_pc;
-
-// Bypass value
-logic [`REG_FILE_DATA_RANGE]        dcache_data_bypass ;
-logic                               dcache_data_bp_valid;
-
-// Request to RF sent to WB
-logic                               dcache_write_rf;
-logic [`REG_FILE_ADDR_RANGE]        dcache_dest_rf;
-logic [`DCACHE_MAX_ACC_SIZE-1:0]    dcache_rsp_data;
-
-// Request from cache to WB for TLB write
-logic                               dcache_to_wb_tlb_req_valid;
-logic                               dcache_to_wb_tlb_id;
-tlb_req_info_t                      dcache_to_wb_tlb_req_info;
+/////////////////////////////////////////
 
 /////////////////////////////////////////
 // WriteBack signals to other stages
 
+// Request to Cache
+dcache_request_t                    wb_req_to_dcache_info;
+logic                               wb_req_to_dcache_valid;
+
+// Request to RF
 logic [`REG_FILE_DATA_RANGE]        wb_writeValRF;
 logic 				                wb_writeEnRF;
 logic [`REG_FILE_ADDR_RANGE]    	wb_destRF;
+logic [`ROB_ID_RANGE]               wb_write_id;
 
+// xcpt data to RF / F
 logic                               wb_xcpt_valid;
 xcpt_type_t                         wb_xcpt_type;
 logic [`PC_WIDTH_RANGE] 		    wb_rmPC;
 logic [`REG_FILE_XCPT_ADDR_RANGE] 	wb_rmAddr;
 
+// Request to TLB
 logic                               wb_new_tlb_entry;
 logic                               wb_new_tlb_id; // 0 for iTLB; 1 for dTLB
 tlb_req_info_t                      wb_new_tlb_info;
+
+//RoB
+logic reorder_buffer_full;
+logic [`ROB_NUM_ENTRIES_W_RANGE] rob_tail;
+
+/////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -161,12 +180,13 @@ fetch_top
 
     // Branches
     .take_branch        (  alu_take_branch
-                         | wb_xcpt_valid         ), 
+                         | wb_xcpt_valid        ), 
     .branch_pc          ( branch_pc             ), 
 
     // Stop fetching instructions
-    .stall_fetch        ( alu_busy | 
-                          !dcache_ready         ),
+    .stall_fetch        (  alu_stall_pipeline  
+                         | mul_stall_pipeline
+                         | reorder_buffer_full  ),
 
     // Fetched instruction
     .decode_instr_data  ( fetch_instr_data      ),
@@ -203,21 +223,23 @@ decode_top
     // System signals
     .clock              ( clock                 ),
     .reset              ( reset                 ),
+
     .priv_mode          ( priv_mode             ),
     .iret_instr         ( alu_iret_instr        ),
 
     // Stall pipeline
-    .stall_decode       (  alu_busy
-                         | !dcache_ready        ),
+    .stall_decode       (  alu_stall_pipeline
+                         | mul_stall_pipeline
+                         | reorder_buffer_full  ),
 
     .flush_decode       (  alu_take_branch 
                          | wb_xcpt_valid        ),
 
-    // Exceptions
-    .xcpt_fetch_in      ( xcpt_fetch_to_decode  ),
-    .xcpt_fetch_out     ( xcpt_fetch_to_alu     ),
-    .decode_xcpt        ( xcpt_decode_to_alu    ),
-    
+    .flush_rob          ( wb_xcpt_valid         ),
+
+    // Exceptions from fetch
+    .xcpt_fetch_in      ( xcpt_fetch_to_decode  ), 
+
     // Fetched instruction
     .fetch_instr_valid  ( fetch_instr_valid     ),
     .fetch_instr_data   ( fetch_instr_data      ),
@@ -226,29 +248,79 @@ decode_top
     // Instruction to ALU
     .req_to_alu_valid   ( req_to_alu_valid      ), 
     .req_to_alu_info    ( req_to_alu_info       ), 
+    .req_to_alu_instr_id( req_to_alu_instr_id   ),
     .req_to_alu_pc      ( req_to_alu_pc         ), 
+    .alu_xcpt_fetch_out ( xcpt_fetch_to_alu     ),
+    .alu_decode_xcpt    ( xcpt_decode_to_alu    ),
+
+    // Instruction to MUL
+    .req_to_mul_valid   ( req_to_mul_valid      ),
+    .req_to_mul_info    ( req_to_mul_info       ),
+    .req_to_mul_instr_id( req_to_mul_instr_id   ),
+    .req_to_mul_pc      ( req_to_mul_pc         ),
+    .mul_xcpt_fetch_out ( xcpt_fetch_to_mul     ),
+    .mul_decode_xcpt    ( xcpt_decode_to_mul    ),
 
     // Write requests to the Register File from WB stage 
-    .writeValRF         ( wb_writeValRF        ), 
-    .writeEnRF          ( wb_writeEnRF         ), 
-    .destRF             ( wb_destRF            ), 
+    .writeValRF         ( wb_writeValRF         ), 
+    .writeEnRF          ( wb_writeEnRF          ), 
+    .destRF             ( wb_destRF             ), 
+    .write_idRF         ( wb_write_id           ),
 
     // Exceptions values to be stored on the RF
     .xcpt_valid         ( wb_xcpt_valid         ),
     .rmPC               ( wb_rmPC               ),
     .rmAddr             ( wb_rmAddr             ),
-    .xcpt_type          ( wb_xcpt_type          ),
+    .xcpt_type          ( wb_xcpt_type          )
+);
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+// Multiplication Unit (ALU). Performs multiplication operation taking into
+// account the fixed latency for this operation and sends the result to the WB, 
+// decode or cache stage depending on the instruction type
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+mul_top
+mul_top
+(
+    // System signals
+    .clock              ( clock ),
+    .reset              ( reset ),
+
+    // Stall pipeline
+    .flush_mul          ( wb_xcpt_valid         ),
+    .stall_decode       ( mul_stall_pipeline    ),
+    
+    // Request from decode stage
+        // Operation
+    .req_mul_valid      ( req_to_mul_valid      ),
+    .req_mul_info       ( req_to_mul_info       ),
+    .req_mul_instr_id   ( req_to_mul_instr_id   ),
+    .req_mul_pc         ( req_to_mul_pc         ), 
+   
+        // Exceptions
+    .xcpt_fetch_in      ( xcpt_fetch_to_mul     ),
+    .xcpt_decode_in     ( xcpt_decode_to_mul    ),
+
+    // Request to WB stage 
+    .req_wb_valid       ( mul_req_to_wb_valid   ),
+    .req_wb_info        ( mul_req_to_wb_info    ),
 
     // Bypasses
-    .alu_data_bypass    ( alu_data_bypass       ),
-    .alu_data_valid     ( alu_data_valid        ),
-    .cache_data_bypass  ( dcache_data_bypass    ),
-    .cache_data_valid   ( dcache_data_bp_valid  )
+        // Reorder buffer
+    .rob_src1_id        ( rob_mul_src1_id       ),
+    .rob_src2_id        ( rob_mul_src2_id       ),
+    .rob_src1_hit       ( rob_mul_src1_hit      ),
+    .rob_src2_hit       ( rob_mul_src2_hit      ),
+    .rob_src1_data      ( rob_mul_src1_data     ),
+    .rob_src2_data      ( rob_mul_src2_data     )
 );
+
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 // Arithmetical Logic Unit (ALU). Performs one instruction per cycle and sends 
-// the result to the RF, fetch or cache stage depending on the instruction
+// the result to the fetch, decode, cache or WB stage depending on the instruction
 // type
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -259,55 +331,48 @@ alu_top
     .clock              ( clock                     ),
     .reset              ( reset                     ),
 
+    // Control signals with RoB
+    .rob_tail           ( rob_tail                  ),
+    .cache_stage_free   ( alu_cache_stage_free      ),
+
     // Stall pipeline
-    .stall_alu          ( !dcache_ready             ),
-    .alu_busy           ( alu_busy                  ),
+    .dcache_ready       ( dcache_ready              ),
     .flush_alu          ( wb_xcpt_valid             ),
+    .stall_decode       ( alu_stall_pipeline        ),
 
     // Exceptions
     .xcpt_fetch_in      ( xcpt_fetch_to_alu         ),
-    .xcpt_fetch_out     ( xcpt_fetch_to_cache       ),
     .xcpt_decode_in     ( xcpt_decode_to_alu        ),
-    .xcpt_decode_out    ( xcpt_decode_to_cache      ),
-    .xcpt_alu_out       ( xcpt_alu_to_cache         ),
 
     // Request from decode stage
     .req_alu_valid      ( req_to_alu_valid          ),
     .req_alu_info       ( req_to_alu_info           ),
+    .req_alu_instr_id   ( req_to_alu_instr_id       ),
     .req_alu_pc         ( req_to_alu_pc             ),
 
     // Request to dcache stage 
-    .req_dcache_pc      ( req_to_dcache_pc          ),
-    .req_dcache_info    ( req_to_dcache_info        ),
-    .req_dcache_valid   ( req_to_dcache_valid       ),
+    .req_dcache_valid   ( alu_req_to_dcache_valid   ),
+    .req_dcache_info    ( alu_req_to_dcache_info    ),
+     
+    // Request to WB stage
+    .req_wb_valid       ( alu_req_wb_valid          ),
+    .req_wb_info        ( alu_req_wb_info           ),
+    .req_wb_mem_blocked ( alu_req_wb_mem_blocked    ),
+    .req_wb_dcache_info ( alu_req_wb_dcache_info    ),
     
-    // Depending on the opcode the D$ will perform the operation or
-    // will just flop the req to send it to WB stage to perform RF write
-    // and/or retire the instruction
-    .req_m_type_instr   ( req_to_dcache_mem_inst    ),
-    .req_r_type_instr   ( req_to_dcache_int_inst    ),
-    .req_dst_reg        ( load_dst_reg              ), 
-
     // Branch signals to fetch stage
     .branch_pc          ( alu_branch_pc             ),
     .take_branch        ( alu_take_branch           ),
     .iret_instr         ( alu_iret_instr            ),
 
-    //Bypass
-    .alu_data_bypass    ( alu_data_bypass           ),
-    .alu_data_valid     ( alu_data_valid            ),
-    .cache_data_bypass  ( dcache_data_bypass        ),
-    .cache_data_bp_valid( dcache_data_bp_valid      ),
-   
-    // Write requests to the Register File from WB stage 
-    .writeValRF         ( wb_writeValRF             ), 
-    .writeEnRF          ( wb_writeEnRF              ), 
-    .destRF             ( wb_destRF                 ),
-
-    // Request to cache stage to propagate TLB write request
-    .tlb_req_valid      ( alu_to_dcache_tlb_req_valid   ),
-    .tlb_id             ( alu_to_dcache_tlb_id          ),
-    .tlb_req_info       ( alu_to_dcache_tlb_req_info    )
+    // Bypasses
+        // Reorder buffer
+    .rob_src1_id        ( rob_alu_src1_id           ),
+    .rob_src2_id        ( rob_alu_src2_id           ),
+    .rob_src1_hit       ( rob_alu_src1_hit          ),
+    .rob_src2_hit       ( rob_alu_src2_hit          ),
+    .rob_src1_data      ( rob_alu_src1_data         ),
+    .rob_src2_data      ( rob_alu_src2_data         )
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -316,44 +381,36 @@ alu_top
 // cache.  
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
+dcache_request_t                    req_to_dcache_info;
+logic                               req_to_dcache_valid;
+
+assign req_to_dcache_valid =   wb_req_to_dcache_valid 
+                             | alu_req_to_dcache_valid;
+
+assign req_to_dcache_info  = (  !wb_req_to_dcache_valid
+                              & !alu_req_to_dcache_valid) ? req_to_dcache_info    :
+                             ( wb_req_to_dcache_valid )   ? wb_req_to_dcache_info :
+                                                            alu_req_to_dcache_info;    
+
 cache_top
 cache_top
 (
     // System signals
     .clock          ( clock                 ),
     .reset          ( reset                 ),
+    .priv_mode      ( priv_mode             ),
 
     // Control signals
     .dcache_ready   ( dcache_ready          ), 
     .flush_cache    ( wb_xcpt_valid         ),
-    .priv_mode      ( priv_mode             ),
-
-    //Exceptions
-    .xcpt_fetch_in   ( xcpt_fetch_to_cache  ),
-    .xcpt_fetch_out  ( xcpt_fetch_to_wb     ),
-    .xcpt_decode_in  ( xcpt_decode_to_cache ),
-    .xcpt_decode_out ( xcpt_decode_to_wb    ),
-    .xcpt_alu_in     ( xcpt_alu_to_cache    ),
-    .xcpt_alu_out    ( xcpt_alu_to_wb       ),   
-    .xcpt_cache      ( xcpt_cache_to_wb     ),
 
     // Request from the ALU stage
-    .req_instr_pc   ( req_to_dcache_pc      ), 
     .req_valid      ( req_to_dcache_valid   ), 
     .req_info       ( req_to_dcache_info    ), 
-    .load_dst_reg   ( load_dst_reg          ), 
-    .mem_instr      ( req_to_dcache_mem_inst), 
-    .int_instr      ( req_to_dcache_int_inst), 
 
-    // Bypasses to previous stages
-    .data_bypass    ( dcache_data_bypass    ),
-    .data_bp_valid  ( dcache_data_bp_valid  ),
-    
     // Request to WB stage
-    .write_rf       ( dcache_write_rf       ), 
-    .dest_rf        ( dcache_dest_rf        ), 
-    .rsp_data       ( dcache_rsp_data       ), 
-    .wb_instr_pc    ( dcache_to_wb_pc       ), 
+    .req_wb_valid   ( cache_req_to_wb_valid ),
+    .req_wb_info    ( cache_req_to_wb_info  ),
     
     // Request to the memory hierarchy
     .req_valid_miss ( dcache_req_valid_miss ),
@@ -366,21 +423,10 @@ cache_top
     .rsp_valid_miss (   rsp_cache_id  
                       & rsp_valid_miss      ),
 
- ///// TLB ports
-    // Request from ALU stage
-    .alu_tlb_req_valid      ( alu_to_dcache_tlb_req_valid   ),
-    .alu_tlb_id             ( alu_to_dcache_tlb_id          ),
-    .alu_tlb_req_info       ( alu_to_dcache_tlb_req_info    ),
-
-    // Request to WB stage
-    .tlb_to_wb_req_valid    ( dcache_to_wb_tlb_req_valid    ),
-    .tlb_to_wb_id           ( dcache_to_wb_tlb_id           ),
-    .tlb_to_wb_req_info     ( dcache_to_wb_tlb_req_info     ),
-
-    // Request from WB stage to add a new entry
-    .new_tlb_entry          (  wb_new_tlb_entry 
-                             & wb_new_tlb_id                ),
-    .new_tlb_info           ( wb_new_tlb_info               )                      
+    // Request from WB stage to add a new TLB entry
+    .new_tlb_entry  (  wb_new_tlb_entry
+                     & wb_new_tlb_id        ),
+    .new_tlb_info   ( wb_new_tlb_info       )                      
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -392,41 +438,66 @@ wb_top
 wb_top
 (
     // System signals
-    .clock                  ( clock                 ),
-    .reset                  ( reset                 ),
+    .clock                  ( clock                     ),
+    .reset                  ( reset                     ),
 
-    // Exceptions
-    .xcpt_fetch             ( xcpt_fetch_to_wb      ),
-    .xcpt_decode            ( xcpt_decode_to_wb     ),
-    .xcpt_alu               ( xcpt_alu_to_wb        ),
-    .xcpt_cache             ( xcpt_cache_to_wb      ),
+    // Reorder buffer
+    .reorder_buffer_full    ( reorder_buffer_full       ),
+    .reorder_buffer_oldest  ( rob_tail                  ),
 
-    // Request from cache stage
-    .cache_req_write_rf     ( dcache_write_rf       ),
-    .cache_req_dest_rf      ( dcache_dest_rf        ),
-    .cache_req_rsp_data     ( dcache_rsp_data       ),
-    .cache_req_pc           ( dcache_to_wb_pc       ),
+      // Request from ALU
+    .alu_req_valid          ( alu_req_wb_valid          ),
+    .alu_req_info           ( alu_req_wb_info           ),
+    
+    .mem_instr_blocked      ( alu_req_wb_mem_blocked    ),
+    .mem_instr_info         ( alu_req_wb_dcache_info    ),
+
+    // Request from MUL
+    .mul_req_valid          ( mul_req_to_wb_valid       ),
+    .mul_req_info           ( mul_req_to_wb_info        ),
+
+    // Request from Cache
+    .cache_req_valid        ( cache_req_to_wb_valid     ),
+    .cache_req_info         ( cache_req_to_wb_info      ),
+
+    // Request to Cache
+    .cache_stage_ready      (  alu_cache_stage_free 
+                             & dcache_ready             ),
+    .req_to_dcache_valid    ( wb_req_to_dcache_valid    ),
+    .req_to_dcache_info     ( wb_req_to_dcache_info     ),
 
     // Request to RF
-    .req_to_RF_data         ( wb_writeValRF         ),
-    .req_to_RF_writeEn      ( wb_writeEnRF          ),
-    .req_to_RF_dest         ( wb_destRF             ),
+    .req_to_RF_data         ( wb_writeValRF             ),
+    .req_to_RF_writeEn      ( wb_writeEnRF              ),
+    .req_to_RF_dest         ( wb_destRF                 ),
+    .req_to_RF_instr_id     ( wb_write_id               ),
 
     // Exceptions values to be stored on the RF
-    .xcpt_valid             ( wb_xcpt_valid         ),
-    .xcpt_type              ( wb_xcpt_type          ),
-    .rmPC                   ( wb_rmPC               ),
-    .rmAddr                 ( wb_rmAddr             ),
+    .xcpt_valid             ( wb_xcpt_valid             ),
+    .xcpt_type              ( wb_xcpt_type              ),
+    .xcpt_pc                ( wb_rmPC                   ),
+    .xcpt_addr              ( wb_rmAddr                 ),
 
-    // Request from cache stage
-    .cache_tlb_req_valid    ( dcache_to_wb_tlb_req_valid  ),
-    .cache_tlb_id           ( dcache_to_wb_tlb_id         ),
-    .cache_tlb_req_info     ( dcache_to_wb_tlb_req_info   ),
+    // Request to TLB
+    .new_tlb_entry          ( wb_new_tlb_entry          ),
+    .new_tlb_id             ( wb_new_tlb_id             ), 
+    .new_tlb_info           ( wb_new_tlb_info           ), 
 
-    // Request from WB to TLB
-    .new_tlb_entry          ( wb_new_tlb_entry      ),
-    .new_tlb_id             ( wb_new_tlb_id         ), 
-    .new_tlb_info           ( wb_new_tlb_info       ) 
+    // Bypass info    
+        // MUL
+    .mul_src1_id            ( rob_mul_src1_id           ),
+    .mul_src2_id            ( rob_mul_src2_id           ),
+    .mul_src1_hit           ( rob_mul_src1_hit          ),
+    .mul_src2_hit           ( rob_mul_src2_hit          ),
+    .mul_src1_data          ( rob_mul_src1_data         ),
+    .mul_src2_data          ( rob_mul_src2_data         ),
+        // ALU
+    .alu_src1_id            ( rob_alu_src1_id           ),
+    .alu_src2_id            ( rob_alu_src2_id           ),
+    .alu_src1_hit           ( rob_alu_src1_hit          ),
+    .alu_src2_hit           ( rob_alu_src2_hit          ),
+    .alu_src1_data          ( rob_alu_src1_data         ),
+    .alu_src2_data          ( rob_alu_src2_data         )
 );
 
 endmodule
