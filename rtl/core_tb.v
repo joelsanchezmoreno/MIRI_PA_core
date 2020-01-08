@@ -314,7 +314,7 @@ begin
         $display("[CORE TB] Finishing simulation, we found all NOPs on memory");
 
         //FIXME: REVIEW
-        for (iter_out = 0; iter_out < `MAIN_MEMORY_DEPTH; iter_out++)
+        for (iter_out = `MM_BOOT_ADDR; iter_out < `MAIN_MEMORY_DEPTH; iter_out++)
             $fwrite(out_file,"%h\n", main_memory[iter_out]);
         $fclose(out_file);
 

@@ -11,6 +11,8 @@ function automatic is_r_type_instr;
         is_r_type_instr = 1'b0;
         if ( (opcode == `INSTR_ADD_OPCODE)
             |(opcode == `INSTR_SUB_OPCODE)
+            |(opcode == `INSTR_SLL_OPCODE)
+            |(opcode == `INSTR_SRL_OPCODE)
             |(opcode == `INSTR_ADDI_OPCODE))
                 is_r_type_instr = 1'b1;
     end

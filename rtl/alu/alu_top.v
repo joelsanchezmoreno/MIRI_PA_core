@@ -355,6 +355,20 @@ begin
         rf_data   =  oper_data[`REG_FILE_DATA_RANGE];
         xcpt_alu.xcpt_overflow = (oper_data[`REG_FILE_DATA_WIDTH+:`REG_FILE_DATA_WIDTH] != '0);
     end
+    //SLL
+    else if (req_alu_info.opcode == `INSTR_SLL_OPCODE)
+    begin
+        oper_data =  `ZX(`ALU_OVW_DATA_WIDTH,ra_data) << `ZX(`ALU_OVW_DATA_WIDTH,req_alu_info.offset);
+        rf_data   =  oper_data[`REG_FILE_DATA_RANGE];
+        xcpt_alu.xcpt_overflow = (oper_data[`REG_FILE_DATA_WIDTH+:`REG_FILE_DATA_WIDTH] != '0);
+    end
+    //SRL
+    else if (req_alu_info.opcode == `INSTR_SRL_OPCODE)
+    begin
+        oper_data =  `ZX(`ALU_OVW_DATA_WIDTH,ra_data) >> `ZX(`ALU_OVW_DATA_WIDTH,req_alu_info.offset);
+        rf_data   =  oper_data[`REG_FILE_DATA_RANGE];
+        xcpt_alu.xcpt_overflow = (oper_data[`REG_FILE_DATA_WIDTH+:`REG_FILE_DATA_WIDTH] != '0);
+    end
     // MEM
 	else if (is_m_type_instr(req_alu_info.opcode)) 
     begin
