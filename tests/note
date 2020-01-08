@@ -5,20 +5,20 @@ Test name: multiple_ld_st_test.hex
 
 # mem[0x1008+0x30] -- initial value 0xCBAE05FA
 
-1000:   ADDI R0,R0,0x7
-1004    ADDI R1,R1,0x3
-1008    ADD  R2,R0,R1 
-100C    ADDI R3,R3,0x1008   
+1000:   ADDI R0,R0,0x7          0
+1004:   ADDI R1,R1,0x3          1
+1008:   ADD  R2,R0,R1           2
+100C:   ADDI R3,R3,0x1008       3
 
-1010    LDW  R5,0x30(R3)  # R5 = 0xCBAE05FA
-1014    STW  0x30(R3),R2  # mem[0x1008+0x30] = 0x0000 0000A
-1018    LDW  R4,0x30(R3)  # R4 = mem[0x1008+0x30]
-101C    ADD  R5,R5,R4     # R5 = R5 + R4 =  0xCBAE05FA + 0xA = 0xCBAE0604  
+1010:   LDW  R5,0x30(R3)        4   # R5 = 0xCBAE05FA
+1014:   STW  0x30(R3),R2        5   # mem[0x1008+0x30] = 0x0000 0000A
+1018:   LDW  R4,0x30(R3)        6   # R4 = mem[0x1008+0x30]
+101C:   ADD  R5,R5,R4           7   # R5 = R5 + R4 =  0xCBAE05FA + 0xA = 0xCBAE0604  
 
-1020    STB  0x32(R3),R1  # mem[0x1008+0x30] = 0x0003 000A
-1024    STB  0x31(R3),R0  # mem[0x1008+0x30] = 0x0003 070A
-1028    STW  0x4C(R3),R2  # mem[0x1008+0x4C] = 0x0000 000A
-102C    STW  0x68(R3),R3  # mem[0x1008+0x68] = 0x0000 1008
+1020:   STB  0x32(R3),R1        0   # mem[0x1008+0x30] = 0x0003 000A
+1024:   STB  0x31(R3),R0        1   # mem[0x1008+0x30] = 0x0003 070A
+1028:   STW  0x4C(R3),R2        2   # mem[0x1008+0x4C] = 0x0000 000A
+102C:   STW  0x68(R3),R3        3   # mem[0x1008+0x68] = 0x0000 1008
     
 What does this check: 
     - Initialize memory (0x1038) to 0xCBAE05FA 
@@ -45,7 +45,7 @@ What does this check:
         - mm[0x1054] = 0x0000000A
         - mm[0x1070] = 0x00001008
 
-Result: All working as expected
+Result: Working as expected                  
 
 ///////////////////////////////////////////////////////////////////////////
 // TEST BRANCHES
@@ -97,8 +97,8 @@ What does this check:
         - mm[0x1084] = 0xEDA
         
 
-Result: All working as expected
-
+Result: Working as expected                  
+                               
 ///////////////////////////////////////////////////////////////////////////
 // TEST BRANCHES WITH MUL
 
@@ -128,7 +128,7 @@ Next to be tested: branches
     1034:   ADDI R5,R5,0xEDA            2
     1038:   JUMP 0x1010                 3
 
-103C:   ADDI R5,R5,0xFEA                4
+103C:   ADDI R5,R5,0xFEA                
         NOP
     
 What does this check: 
@@ -150,8 +150,7 @@ What does this check:
         - mm[0x1080] = 0x8
         - mm[0x1084] = 0xEDA
         
-
-Result: All working as expected
+Result: Working as expected                  
 
 ///////////////////////////////////////////////////////////////////////////
 // EXCEPTIONS ILLEGAL INSTRUCTION (TEST LOADS AND STORES)
@@ -161,24 +160,29 @@ Test name: xcpt_illegal_instruction.hex
 # mem[0x1008+0x30] -- initial value 0xCBAE05FA
 # mem[0x2000] -- initial value 0x07EF7DA1
 
-    ADDI R0,R0,0x7
-    ADDI R1,R1,0x3
-    ADD  R2,R0,R1 
-    ADDI R3,R3,0x1008   
-    LDW  R5,0x30(R3)  
-    STW  0x30(R3),R2  # mem[0x1008+0x30] = 0x0000 0000A
-    LDW  R4,0x30(R3)  # R4 = mem[0x1008+0x30]
-    ADD  R5,R5,R4     # R5 = R5 + R4 =  0xCBAE05FA + 0xA = 0xCBAE0604  
-    STB  0x32(R3),R1  # mem[0x1008+0x30] = 0x0003 000A
-    STB  0x31(R3),R0  # mem[0x1008+0x30] = 0x0003 070A
-    STW  0x4C(R3),R2  # mem[0x1008+0x4C] = 0x0000 000A
-    STW  0x68(R3),R3  # mem[0x1008+0x68] = 0x0000 1008
-    
+1000:   ADDI R0,R0,0x7          0
+1004:   ADDI R1,R1,0x3          1
+1008:   ADD  R2,R0,R1           2
+100C:   ADDI R3,R3,0x1008       3
+
+1010:   LDW  R5,0x30(R3)        4   # R5 = 0xCBAE05FA
+1014:   STW  0x30(R3),R2        5   # mem[0x1008+0x30] = 0x0000 0000A
+1018:   LDW  R4,0x30(R3)        6   # R4 = mem[0x1008+0x30]
+101C:   ADD  R5,R5,R4           7   # R5 = R5 + R4 =  0xCBAE05FA + 0xA = 0xCBAE0604  
+
+1020:   STB  0x32(R3),R1        0   # mem[0x1008+0x30] = 0x0003 000A
+1024:   STB  0x31(R3),R0        1   # mem[0x1008+0x30] = 0x0003 070A
+1028:   STW  0x4C(R3),R2        2   # mem[0x1008+0x4C] = 0x0000 000A
+102C:   STW  0x68(R3),R3        3   # mem[0x1008+0x68] = 0x0000 1008
+
+1030:   - illegal opcode -      4
+
+2000:   ADDI R30,R30,0x7DA1     0
+
 What does this check: 
     - Initialize memory (0x1038) to 0xCBAE05FA 
     - This test is the same as the one above for LD and ST, but here we have written 
-      memory address position 0x2000 with an ADDI instruction for R30 with a value of 
-      0x7DA1. 
+      memory address position 0x2000 with an ADDI instruction for R30.
     - An illegal instruction will raise after last STW is executed since the fetch will 
       start reading memory positions with incorrect opcodes. This will cause the WB stage
       to force fetch to take a branch to exception handler at PC 0x2000.
@@ -197,7 +201,7 @@ What does this check:
         - mm[0x1054] = 0x0000000A
         - mm[0x1070] = 0x00001008
 
-Result: All working as expected
+Result: Working as expected                  
 
 ///////////////////////////////////////////////////////////////////////////
 // EXCEPTIONS MUL OVERFLOW
@@ -223,7 +227,7 @@ What does this check:
         - R1 = 0x3FFF0001
         - R30 = 0x7DA1
 
-Result: All working as expected
+Result: Working as expected                  
 
 ///////////////////////////////////////////////////////////////////////////
 // EXCEPTIONS ADD OVERFLOW
@@ -241,14 +245,14 @@ Test name: xcpt_add_overflow.hex
 2000:   ADDI R30,R30,0x7DA1     5
     
 What does this check: 
-    - We have written memory address position 0x200 with an ADDI instruction  
+    - We have written memory address position 0x200 with an ADDI instruction. 
     - The third ADD will raise an overflow exception. Then, a branch to adress 0x2000 will be taken.
  
 - If evertyhing goes as expected we should see the next values on the registers:
         - R0 = 0xFFFC0004
         - R30 = 0x7DA1
 
-Result: 
+Result: Working as expected                  
 
 ///////////////////////////////////////////////////////////////////////////
 // EXCEPTIONS ADDI OVERFLOW
@@ -257,41 +261,44 @@ Test name: xcpt_addi_overflow.hex
 
 # mem[0x2000] -- initial value 0x07EF7DA1
 
-    LD R0,0x1030(R0)
-    ADDI R1,R1,0x1
+1000:   LD R0,0x1030(R0)        0
+1004:   ADDI R1,R1,0x1          1
+
+2000:   ADDI R30,R30,0x7DA1     2
     
 What does this check: 
-    - We have written memory address position 0x200 with an ADDI instruction for 
-      ADDI R30,R30,0x7DA1. 
+    - We have written memory address position 0x200 with an ADDI instruction.
     - The ADDI will raise an overflow exception. Then, a branch to adress 0x2000 will be taken.
  
 - If evertyhing goes as expected we should see the next values on the registers:
         - R0 = 0xFFFFFFFF
         - R30 = 0x7DA1
 
-Result:                        
+Result: Working as expected                  
 
 ///////////////////////////////////////////////////////////////////////////
 // EXCEPTIONS CACHE BUS ERROR
 
 Test name: xcpt_cache_bus_error.hex
 
+# mem[0x1030] -- initial value 0xFFFFFFFF
 # mem[0x2000] -- initial value 0x07EF7DA1
 
-    LD R0,0x1030(R0)
-    LD R1,0x0(R0)
-    ADDI R1,R1,0x1
-    
+1000:   LD R0,0x1030(R0)        0
+1004:   LD R1,0x0(R0)           1
+1008:   ADDI R1,R1,0x1          2
+  
+2000:   ADDI R30,R30,0x7DA1     3
+  
 What does this check: 
-    - We have written memory address position 0x200 with an ADDI instruction for 
-      ADDI R30,R30,0x7DA1. 
+    - We have written memory address position 0x200 with an ADDI instruction
     - The second LD will raise a bus error exception. Then, a branch to adress 0x2000 will be taken.
  
 - If evertyhing goes as expected we should see the next values on the registers:
         - R0 = 0xFFFFFFFF
         - R30 = 0x7DA1
 
-Result:                        
+Result: Working as expected                  
 
 ///////////////////////////////////////////////////////////////////////////
 // Exception handler testing with cache bus error
@@ -300,13 +307,13 @@ Test name: xcpt_handler_tlb.hex
 
 #########
 ### Code to generate the xcpt
-#1000:  ADDI R28,R28,0x6BCD
-#1004:  ADDI R29,R29,0x6BCD
-#1008:  ADDI R30,R30,0x6BCD
-#100C:  ADDI R5, R5, 0x6BCD
-#1010:  ADDI R6, R6, 0x6BCD
-#1014:  LDW R0,0x1030(R0)
-#1018:  LDW R1,0x0(R0)
+#1000:  ADDI R28,R28,0x6BCD         0
+#1004:  ADDI R29,R29,0x6BCD         1
+#1008:  ADDI R30,R30,0x6BCD         2
+#100C:  ADDI R5, R5, 0x6BCD         3
+#1010:  ADDI R6, R6, 0x6BCD         4
+#1014:  LDW R0,0x1030(R0)           5
+#1018:  LDW R1,0x0(R0)              6
 #101c:  ADDI R2,R2,0x1000
     
 #########
@@ -357,16 +364,19 @@ What does this check:
     - The src code will produce a cache bus error exception when trying to LD from incorrect address.
     - This will force the core to jump to the exception handler at address 0x2000
         - Then, this will save the values for R28,R29,R30.
-        - Next, it will NOT hit on iTLB nor dTLB xcpt checks, and will jump to 0x2800 where it will:
-            - Write R26 with 0x6BCD to note that is a different type of xcpt.
+        - Next, it will NOT hit on iTLB so it will jump to 0x204C.
+        - Next, it will also NOT hit on dTLB xcpt check:
+            - It will write R26 with 0x6BCD to note that this xcpt is different than dTLB and iTLB
+            - Will perform a jump to 0x2800 
+        - Finally, once the core is executing from PC 0x2800 it will:
             - Restore the value for R28,R29,R30.
             - Perform an IRET.
 
-    - It will then start executing from PC 0x1018, which was the instruction that caused cache bus error
+    - It will then start executing from virt. PC 0x1018, which was the instruction that caused cache bus error
       exception. But since we returned from xcpt handler, now the privilege mode is User mode, and this 
       means that TLB is now enabled. 
 
-    - The PC 0x1018 is sent to iTLB and it misses, this generates an iTLB exception that is propagated up 
+    - The virt. PC 0x1018 is sent to iTLB and it misses, this generates an iTLB exception that is propagated up 
       to the WB stage where it forces the core to jump to the exception handler again at address 0x2000.
       The privilege mode is then changed to Supervisor.
         - Then, this will save the values for R28,R29,R30.
@@ -407,5 +417,4 @@ What does this check:
         - R29 = 0x6BCD
         - R30 = 0x6BCD
 
-Result:                   
-
+Result: Working as expected                  
