@@ -16,6 +16,16 @@ function automatic is_r_type_instr;
     end
 endfunction
 
+
+function automatic is_addi_type_instr;
+    input logic [`INSTR_OPCODE_RANGE] opcode;
+    begin
+        is_addi_type_instr = 1'b0;
+        if (opcode == `INSTR_ADDI_OPCODE)
+            is_addi_type_instr = 1'b1;
+    end
+endfunction
+
 function automatic is_mul_instr;
     input logic [`INSTR_OPCODE_RANGE] opcode;
     begin

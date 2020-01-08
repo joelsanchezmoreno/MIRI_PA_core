@@ -134,6 +134,7 @@ assign wait_rsp_enable = (!dcache_req_valid_miss & icache_req_valid_miss) | wait
 always_comb
 begin
     rsp_valid_miss  = 1'b0;
+    rsp_bus_error   = rsp_mm_bus_error;
 
     // Hold values for next cycle
     dcache_req_valid_next = dcache_req_valid_ff;
@@ -171,7 +172,6 @@ begin
 
                 // Response to the core
                 rsp_valid_miss  = 1'b1;
-                rsp_bus_error   = rsp_mm_bus_error;
                 rsp_cache_id    = 1'b1; // response to D$
                 rsp_data_miss   = rsp_mm_data; 
 
@@ -203,7 +203,6 @@ begin
 
                 // Response to the core                
                 rsp_valid_miss  = 1'b1;
-                rsp_bus_error   = rsp_mm_bus_error;
                 rsp_cache_id    = 1'b0; // response to I$
                 rsp_data_miss   = rsp_mm_data;
                 

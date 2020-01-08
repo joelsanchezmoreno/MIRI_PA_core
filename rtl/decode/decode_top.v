@@ -76,24 +76,20 @@ fetch_xcpt_t    xcpt_fetch_ff;
 `RST_EN_FF(clock, reset | flush_decode, !stall_decode, decode_xcpt_ff, decode_xcpt_next, '0)
 `RST_EN_FF(clock, reset | flush_decode, !stall_decode, xcpt_fetch_ff,  xcpt_fetch_in,    '0)
 
-assign alu_decode_xcpt      = (stall_decode) ? alu_decode_xcpt  : 
-                              (flush_decode) ? '0               : 
-                              (mul_instr)    ? '0               :
+assign alu_decode_xcpt      = (flush_decode) ? '0 : 
+                              (mul_instr)    ? '0 :
                                                decode_xcpt_ff;
 
-assign alu_xcpt_fetch_out   = (stall_decode) ? alu_xcpt_fetch_out   : 
-                              (flush_decode) ? '0                   : 
-                              (mul_instr)    ? '0                   :
+assign alu_xcpt_fetch_out   = (flush_decode) ? '0 : 
+                              (mul_instr)    ? '0 :
                                                xcpt_fetch_ff;
 
-assign mul_decode_xcpt      = (stall_decode)  ? mul_decode_xcpt : 
-                              (flush_decode)  ? '0              : 
-                              (!mul_instr)    ? '0              :
+assign mul_decode_xcpt      = (flush_decode)  ? '0 : 
+                              (!mul_instr)    ? '0 :
                                                 decode_xcpt_ff;
 
-assign mul_xcpt_fetch_out   = (stall_decode)  ? mul_xcpt_fetch_out  : 
-                              (flush_decode)  ? '0                  : 
-                              (!mul_instr)    ? '0                  :
+assign mul_xcpt_fetch_out   = (flush_decode)  ? '0 : 
+                              (!mul_instr)    ? '0 :
                                                xcpt_fetch_ff;
                                            
 /////////////////////////////////////////
@@ -104,23 +100,25 @@ alu_request_t           req_to_alu_info_next;
 alu_request_t           req_to_alu_info_ff;
 logic [`PC_WIDTH-1:0]   req_to_alu_pc_ff;
 
-//         CLK    RST                   EN             DOUT                 DIN                    DEF
-`RST_EN_FF(clock, reset | flush_decode, !stall_decode, req_to_alu_valid_ff, req_to_alu_valid_next, '0)
+//      CLK    RST                   DOUT                 DIN                    DEF
+`RST_FF(clock, reset | flush_decode, req_to_alu_valid_ff, req_to_alu_valid_next, '0)
 
-//     CLK    EN            DOUT                DIN                  
-`EN_FF(clock, !stall_decode, req_to_alu_pc_ff,   fetch_instr_pc      )
+//     CLK    EN             DOUT              DIN            
+`EN_FF(clock, !stall_decode, req_to_alu_pc_ff, fetch_instr_pc)
 
-//     CLK    EN                         DOUT                DIN                  
-`EN_FF(clock, !stall_decode | writeEnRF, req_to_alu_info_ff, req_to_alu_info_next)
+//     CLK    EN             DOUT                DIN                  
+`EN_FF(clock, !stall_decode, req_to_alu_info_ff, req_to_alu_info_next)
+//`EN_FF(clock, !stall_decode | writeEnRF, req_to_alu_info_ff, req_to_alu_info_next)
 
 
-assign req_to_alu_valid_next =  ( flush_decode      ) ? 1'b0          : // Invalidate instruction
+assign req_to_alu_valid_next =  ( flush_decode      ) ? 1'b0       : // Invalidate instruction
+                                ( stall_decode      ) ? 1'b0       :
                                 ( fetch_instr_valid ) ? !mul_instr : // New instruction from fetch
                                                         1'b0;
 
-assign req_to_alu_valid = (stall_decode | flush_decode) ? 1'b0            : req_to_alu_valid_ff;
-assign req_to_alu_info  = (stall_decode | flush_decode) ? req_to_alu_info : req_to_alu_info_ff;
-assign req_to_alu_pc    = (stall_decode | flush_decode) ? req_to_alu_pc   : req_to_alu_pc_ff;
+assign req_to_alu_valid = (flush_decode) ? 1'b0 : req_to_alu_valid_ff;
+assign req_to_alu_info  = req_to_alu_info_ff;
+assign req_to_alu_pc    = req_to_alu_pc_ff;
 
 /////////////////////////////////////////
 // Control logic for requests to be sent to MUL
@@ -130,23 +128,25 @@ mul_request_t           req_to_mul_info_next;
 mul_request_t           req_to_mul_info_ff;
 logic [`PC_WIDTH-1:0]   req_to_mul_pc_ff;
 
-//         CLK    RST                   EN             DOUT                 DIN                    DEF
-`RST_EN_FF(clock, reset | flush_decode, !stall_decode, req_to_mul_valid_ff, req_to_mul_valid_next, '0)
+//      CLK    RST                   DOUT                 DIN                    DEF
+`RST_FF(clock, reset | flush_decode, req_to_mul_valid_ff, req_to_mul_valid_next, '0)
 
 //     CLK    EN            DOUT                DIN                  
 `EN_FF(clock, !stall_decode, req_to_mul_pc_ff,   fetch_instr_pc      )
 
-//     CLK    EN                         DOUT                DIN                  
-`EN_FF(clock, !stall_decode | writeEnRF, req_to_mul_info_ff, req_to_mul_info_next)
+//     CLK    EN             DOUT                DIN                  
+`EN_FF(clock, !stall_decode, req_to_mul_info_ff, req_to_mul_info_next)
+//`EN_FF(clock, !stall_decode | writeEnRF, req_to_mul_info_ff, req_to_mul_info_next)
 
 
 assign req_to_mul_valid_next =  ( flush_decode      ) ? 1'b0         : // Invalidate instruction
+                                ( stall_decode      ) ? 1'b0         : // Stall the pipeline 
                                 ( fetch_instr_valid ) ? mul_instr : // New instruction from fetch
                                                         1'b0;
 
-assign req_to_mul_valid = (stall_decode | flush_decode) ? 1'b0            : req_to_mul_valid_ff;
-assign req_to_mul_info  = (stall_decode | flush_decode) ? req_to_mul_info : req_to_mul_info_ff;
-assign req_to_mul_pc    = (stall_decode | flush_decode) ? req_to_mul_pc   : req_to_mul_pc_ff;
+assign req_to_mul_valid = (flush_decode) ? 1'b0 : req_to_mul_valid_ff;
+assign req_to_mul_info  = req_to_mul_info_ff;
+assign req_to_mul_pc    = req_to_mul_pc_ff;
 
 
 /////////////////////////////////////////
@@ -160,20 +160,24 @@ logic [`REG_FILE_DATA_RANGE] rm2_data;
 /////////////////////////////////////////
 // Bypass control signals
 
+logic stall_decode_ff;
+//      CLK    RST                DOUT             DIN           DEF
+`RST_FF(clock, reset | flush_rob, stall_decode_ff, stall_decode, '0)
+
 // FF to store the instr. ID that blocks each register
 logic [`REG_FILE_NUM_REGS_RANGE][`ROB_NUM_ENTRIES_W_RANGE] reg_rob_id_next;
 logic [`REG_FILE_NUM_REGS_RANGE][`ROB_NUM_ENTRIES_W_RANGE] reg_rob_id_ff;
 
-//  CLK    DOUT           DIN   
-`FF(clock, reg_rob_id_ff, reg_rob_id_next)
+//     CLK    EN             DOUT           DIN   
+`EN_FF(clock, !stall_decode, reg_rob_id_ff, (flush_decode_ff) ? reg_rob_id_next_2 : reg_rob_id_next)
 
 // Valid bit for each register that is asserted if we are waiting for a instr.
 // to finish before performing the operation
 logic [`REG_FILE_NUM_REGS_RANGE] reg_blocked_valid_next;
 logic [`REG_FILE_NUM_REGS_RANGE] reg_blocked_valid_ff;
 
-//      CLK    RST                DOUT                  DIN                     DEF
-`RST_FF(clock, reset | flush_rob, reg_blocked_valid_ff, reg_blocked_valid_next, '0)
+//         CLK    RST                EN             DOUT                  DIN                                                                    DEF
+`RST_EN_FF(clock, reset | flush_rob, !stall_decode, reg_blocked_valid_ff, (flush_decode_ff) ? reg_blocked_valid_next_2 : reg_blocked_valid_next, '0)
 
 logic   [`ROB_ID_RANGE]         ticket_src1;    // instr. that is blocking src1
 logic                           rob_blocks_src1;// Asserted if there is an instr. blocking src1
@@ -183,22 +187,21 @@ logic                           rob_blocks_src2;// Asserted if there is an instr
 logic   [`ROB_NUM_ENTRIES_W_RANGE] reorder_buffer_tail_next;
 logic   [`ROB_NUM_ENTRIES_W_RANGE] reorder_buffer_tail_ff;
 
-//      CLK    RST                DOUT                    DIN                       DEF
-`RST_FF(clock, reset | flush_rob, reorder_buffer_tail_ff, reorder_buffer_tail_next, '0)
-
+//         CLK    RST                EN             DOUT                    DIN                       DEF
+`RST_EN_FF(clock, reset | flush_rob, !stall_decode, reorder_buffer_tail_ff, reorder_buffer_tail_next, '0)
 
 // Needed in case ALU forces to take a branch, so we have to restore the
 // value we had, instead of taking into account the current instruction
 logic [`REG_FILE_NUM_REGS_RANGE] reg_blocked_valid_ff_2;
-logic [`ROB_NUM_ENTRIES_W_RANGE] reorder_buffer_tail_ff_2;
-logic [`REG_FILE_NUM_REGS_RANGE] reg_blocked_valid_next_2;
-logic [`ROB_NUM_ENTRIES_W_RANGE] reorder_buffer_tail_next_2;
-logic [`REG_FILE_NUM_REGS_RANGE][`ROB_NUM_ENTRIES_W_RANGE] reg_rob_id_next_2;
 logic [`REG_FILE_NUM_REGS_RANGE][`ROB_NUM_ENTRIES_W_RANGE] reg_rob_id_ff_2;
+
+// Needed in case we receive a RF write request while restoring status
+logic [`REG_FILE_NUM_REGS_RANGE] reg_blocked_valid_next_2;
+logic [`REG_FILE_NUM_REGS_RANGE][`ROB_NUM_ENTRIES_W_RANGE] reg_rob_id_next_2;
+
 
 //      CLK    RST                DOUT                      DIN                         DEF
 `RST_FF(clock, reset | flush_rob, reg_blocked_valid_ff_2,   reg_blocked_valid_next_2,   '0)
-`RST_FF(clock, reset | flush_rob, reorder_buffer_tail_ff_2, reorder_buffer_tail_next_2, '0)
 `RST_FF(clock, reset | flush_rob, reg_rob_id_ff_2,          reg_rob_id_next_2,          '0)
 
 logic flush_decode_ff;
@@ -209,16 +212,15 @@ logic flush_decode_ff;
 // Manage RoB tickets and blocker
 always_comb
 begin
-    // Maintain values from 2 cycles ago for restore purposes
-    reg_blocked_valid_next_2   = (flush_decode) ? reg_blocked_valid_ff_2    : reg_blocked_valid_ff;
-    reorder_buffer_tail_next_2 = (flush_decode) ? reorder_buffer_tail_ff_2  : reorder_buffer_tail_ff;
-    reg_rob_id_next_2          = (flush_decode) ? reg_rob_id_ff_2           : reg_rob_id_ff;
+   // Maintain values from 2 cycles ago for restore purposes
+    reg_blocked_valid_next_2   = (flush_decode) ? reg_blocked_valid_ff_2 : reg_blocked_valid_ff;
+    reg_rob_id_next_2          = (flush_decode | flush_decode_ff) ? reg_rob_id_ff_2 : reg_rob_id_ff;
 
     // Mantain values from previous cycle by default
-    reg_blocked_valid_next   = (flush_decode_ff) ? reg_blocked_valid_ff_2   : reg_blocked_valid_ff;
-    reorder_buffer_tail_next = (flush_decode_ff) ? reorder_buffer_tail_ff_2 : reorder_buffer_tail_ff;
-    reg_rob_id_next          = (flush_decode_ff) ? reg_rob_id_ff_2          : reg_rob_id_ff;
-    
+    reg_blocked_valid_next     = reg_blocked_valid_ff;
+    reg_rob_id_next            = reg_rob_id_ff;
+    reorder_buffer_tail_next   = reorder_buffer_tail_ff;
+
     rob_blocks_src1 = 1'b0;
     rob_blocks_src2 = 1'b0;
 
@@ -262,7 +264,8 @@ begin
         else
         begin
             ticket_src2 = reg_rob_id_ff[rb_addr];
-            if (reg_blocked_valid_ff[rb_addr]) //check if this register is protected
+            if (  !is_addi_type_instr(opcode) 
+                & reg_blocked_valid_ff[rb_addr]) //check if this register is protected
             begin
                 // check if the value written to RF corresponds to the
                 // blocker instr
@@ -275,7 +278,8 @@ begin
     end          
     
      
-    if (req_to_alu_valid | req_to_mul_valid)
+    if ( (req_to_alu_valid | req_to_mul_valid)
+        | (!stall_decode & stall_decode_ff))
         reorder_buffer_tail_next = reorder_buffer_tail_ff + 1'b1;
 
     // Update blocker arrays if needed
@@ -296,6 +300,7 @@ begin
     begin
         reg_blocked_valid_next[destRF] = 1'b0;
     end
+
     if ( writeEnRF & (reg_rob_id_ff_2[destRF] == write_idRF))
     begin
         reg_blocked_valid_next_2[destRF] = 1'b0;        
@@ -316,7 +321,7 @@ begin
     // Opcode and destination register are always decoded from the instruction
     // provided by the fetch stage
         // ALU
-    req_to_alu_instr_id                  = (stall_decode | flush_decode) ? req_to_alu_instr_id : reorder_buffer_tail_ff;
+    req_to_alu_instr_id                  = reorder_buffer_tail_ff;
     req_to_alu_info_next.opcode          = opcode;
     req_to_alu_info_next.rd_addr         = rd_addr;
     req_to_alu_info_next.ra_addr         = ra_addr;
@@ -327,7 +332,7 @@ begin
     req_to_alu_info_next.rob_blocks_src2 = rob_blocks_src2;  
 
         // MUL                                                                              
-    req_to_mul_instr_id                  = (stall_decode | flush_decode) ? req_to_mul_instr_id : reorder_buffer_tail_ff;
+    req_to_mul_instr_id                  = reorder_buffer_tail_ff;
     req_to_mul_info_next.rd_addr         = rd_addr;
     req_to_mul_info_next.ra_addr         = ra_addr;
     req_to_mul_info_next.rb_addr         = rb_addr;

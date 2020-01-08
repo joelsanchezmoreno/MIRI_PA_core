@@ -50,10 +50,10 @@ assign decode_xcpt_valid =  req_mul_valid
 //////////////////////////////////////
 // Stall
 
-logic stall_decode_next;
+logic stall_decode_ff;
 
-//      CLK    RST                DOUT          DIN                DEF
-`RST_FF(clock, reset | flush_mul, stall_decode, stall_decode_next, 1'b0)
+//      CLK    RST                DOUT             DIN           DEF
+`RST_FF(clock, reset | flush_mul, stall_decode_ff, stall_decode, 1'b0)
 
 //////////////
 // Signals between stages
@@ -125,11 +125,19 @@ logic   [`REG_FILE_DATA_RANGE]  rob_src2_data_ff;
 
 always_comb
 begin
+    // Bypass values from RoB
+    rob_src1_id = req_mul_info.ticket_src1;
+    rob_src2_id = req_mul_info.ticket_src2;
+
     rob_blocks_src1     = req_mul_info.rob_blocks_src1;
     rob_blocks_src2     = req_mul_info.rob_blocks_src2;
-    stall_decode_next   = stall_decode;
 
-    if ( stall_decode )
+    rob_src1_found_next = rob_src1_found_ff;
+    rob_src2_found_next = rob_src2_found_ff;
+
+    stall_decode        = stall_decode_ff;
+
+    if ( stall_decode_ff )
     begin
         // Check if there is a hit on this cycle and store the hit, only if we
         // did not hit last cycle
@@ -142,44 +150,40 @@ begin
         // Check if we can unblock decode stage
         if (rob_blocks_src1 & rob_blocks_src2)
         begin
-            stall_decode_next =!(  (rob_src1_found_ff | rob_src1_hit)
-                                 & (rob_src2_found_ff | rob_src2_hit));
+            stall_decode =!(  (rob_src1_found_ff | rob_src1_hit)
+                            & (rob_src2_found_ff | rob_src2_hit));
         end
         else if ( rob_blocks_src1 )
         begin
-            stall_decode_next = !(rob_src1_found_ff | rob_src1_hit);
+            stall_decode = !(rob_src1_found_ff | rob_src1_hit);
         end
         else // if ( rob_blocks_src2 )
         begin
-            stall_decode_next = !(rob_src2_found_ff | rob_src2_hit);
+            stall_decode = !(rob_src2_found_ff | rob_src2_hit);
         end
-    end // stall_decode
+    end // stall_decode_ff
 
     // if !stall_decode
     else 
     begin
-        stall_decode_next =  (  fetch_xcpt_valid
-                              | decode_xcpt_valid ) ? 1'b0 : 
-                             ( req_mul_valid      ) ?   ( rob_blocks_src1 
-                                                         & !rob_src1_hit  
-                                                         & (req_mul_info.ticket_src1 != req_mul_instr_id))
-                                                      | ( rob_blocks_src2 
-                                                         & !rob_src2_hit  
-                                                         & (req_mul_info.ticket_src2 != req_mul_instr_id)) :
-                                                      1'b0;
-    
         rob_src1_found_next = rob_src1_hit;
         rob_src2_found_next = rob_src2_hit;
-    end
 
+        stall_decode =  (  fetch_xcpt_valid
+                         | decode_xcpt_valid ) ? 1'b0 : 
+                        ( req_mul_valid      ) ?   ( rob_blocks_src1 
+                                                    & !rob_src1_hit  
+                                                    & (req_mul_info.ticket_src1 != req_mul_instr_id))
+                                                 | ( rob_blocks_src2 
+                                                    & !rob_src2_hit  
+                                                    & (req_mul_info.ticket_src2 != req_mul_instr_id)) :
+                                                 1'b0;
+    end
 end
 
 
 always_comb
 begin
-    // Bypass values from RoB
-    rob_src1_id = req_mul_info.ticket_src1;
-    rob_src2_id = req_mul_info.ticket_src2;
 
     ra_data = (rob_blocks_src1) ? (rob_src1_hit) ? rob_src1_data    : 
                                                    rob_src1_data_ff :
@@ -193,9 +197,8 @@ begin
         // Operation
     instr_id_next[0]        = req_mul_instr_id;
     instr_valid_next[0]     = ( flush_mul           ) ? 1'b0 :
-                              ( !stall_decode_next 
-                               & stall_decode       ) ? 1'b1 :
                               ( stall_decode        ) ? 1'b0 :
+                              ( stall_decode_ff     ) ? 1'b1 :
                                                         req_mul_valid;
 
     req_wb_pc_next[0]       = req_mul_pc;

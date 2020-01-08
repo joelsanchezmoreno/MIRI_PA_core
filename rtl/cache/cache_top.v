@@ -38,22 +38,18 @@ assign cache_hazard = (!dcache_ready & !dcache_rsp_valid);
 
 //////////////////////////////////////////////////
 // Exceptions
-cache_xcpt_t  xcpt_cache_next;
-cache_xcpt_t  xcpt_cache_ff;
+cache_xcpt_t  xcpt_cache;
 logic xcpt_bus_error;
 logic xcpt_dtlb_miss;
 
-//         CLK    RST                  EN            DOUT            DIN             DEF
-`RST_EN_FF(clock, reset | flush_cache, !cache_hazard, xcpt_cache_ff,  xcpt_cache_next,'0)
-
 always_comb
 begin
-    xcpt_cache_next.xcpt_bus_error  = xcpt_bus_error    ;
-    xcpt_cache_next.xcpt_dtlb_miss  =   xcpt_dtlb_miss 
-                                      | (!dTlb_write_privilege & dTlb_rsp_valid & req_info.is_store); 
-    xcpt_cache_next.xcpt_addr_fault = 1'b0; //FIXME: We do not have different privilege modes
-    xcpt_cache_next.xcpt_addr_val   = req_info.addr;
-    xcpt_cache_next.xcpt_pc         = req_info.pc;
+    xcpt_cache.xcpt_bus_error  = xcpt_bus_error    ;
+    xcpt_cache.xcpt_dtlb_miss  =   xcpt_dtlb_miss 
+                                 | (!dTlb_write_privilege & dTlb_rsp_valid & req_info.is_store); 
+    xcpt_cache.xcpt_addr_fault = 1'b0; //FIXME: We do not have different privilege modes
+    xcpt_cache.xcpt_addr_val   = req_info.addr;
+    xcpt_cache.xcpt_pc         = req_info.pc;
 end
 
 //////////////////////////////////////////////////
@@ -74,8 +70,8 @@ writeback_request_t                 req_wb_info_ff;
 `RST_EN_FF(clock, reset | flush_cache, !cache_hazard,                    req_wb_valid_ff, req_wb_valid_next, '0)
 `RST_EN_FF(clock, reset | flush_cache, !cache_hazard | dcache_rsp_valid, req_wb_info_ff,  req_wb_info_next,  '0)
 
-assign req_wb_valid = (cache_hazard | flush_cache) ? 1'b0         : req_wb_valid_ff;
-assign req_wb_info  = (cache_hazard | flush_cache) ? req_wb_info  : req_wb_info_ff;
+assign req_wb_valid = (cache_hazard) ? 1'b0 : req_wb_valid_ff;
+assign req_wb_info  = req_wb_info_ff;
 
 always_comb
 begin
@@ -94,14 +90,24 @@ begin
     req_wb_info_next.xcpt_decode    = req_info.xcpt_decode;
     req_wb_info_next.xcpt_alu       = req_info.xcpt_alu;
     req_wb_info_next.xcpt_mul       = '0;
-    req_wb_info_next.xcpt_cache     = xcpt_cache_ff; 
+    req_wb_info_next.xcpt_cache     = xcpt_cache; 
 end
 
 // In case of LD request we will have to write that data on the RF.
 // In addition, we also check if the request is for an ALU R type 
 // instruction, which also writes on the RF.
-assign req_wb_valid_next =  ( flush_cache ) ? 1'b0 :
-                                              dcache_rsp_valid;
+logic instr_xcpt;
+assign instr_xcpt =   req_info.xcpt_fetch.xcpt_itlb_miss
+                    | req_info.xcpt_fetch.xcpt_bus_error
+                    | req_info.xcpt_decode.xcpt_illegal_instr
+                    | req_info.xcpt_alu.xcpt_overflow
+                    | xcpt_cache.xcpt_bus_error   
+                    | xcpt_cache.xcpt_dtlb_miss   
+                    | xcpt_cache.xcpt_addr_fault ;
+
+assign req_wb_valid_next =  ( flush_cache           ) ? 1'b0 :
+                            ( req_valid & instr_xcpt) ? 1'b1:
+                                                        dcache_rsp_valid;
 
 
 /////////////////////////////////////////                                                

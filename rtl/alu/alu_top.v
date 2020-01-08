@@ -50,11 +50,9 @@ module alu_top
 );
 //////////////////////////////////////
 // Stall
-
-logic stall_decode_next;
-
-//      CLK    RST                DOUT          DIN                DEF
-`RST_FF(clock, reset | flush_alu, stall_decode, stall_decode_next, 1'b0)
+logic stall_decode_ff;
+//      CLK    RST                DOUT             DIN            DEF
+`RST_FF(clock, reset | flush_alu, stall_decode_ff, stall_decode, 1'b0)
 
 //////////////////////////////////////
 // Exceptions
@@ -94,53 +92,37 @@ dcache_request_t req_dcache_info_ff;
 `RST_FF(clock, reset | flush_alu, req_dcache_valid_ff,   req_dcache_valid_next,   1'b0)
 `RST_FF(clock, reset | flush_alu, req_wb_mem_blocked_ff, req_wb_mem_blocked_next, 1'b0)
 
-// Request to WB stage in case ST/LD is not the oldest instr
-
+// Request to WB stage in case ST/LD is not the oldest instr or dcache is not
+// ready
 logic wb_mem_blocked_type;
 assign wb_mem_blocked_type =   is_m_type_instr(req_alu_info.opcode) 
                              & ((rob_tail != req_alu_instr_id) | !dcache_ready );
 
-assign req_wb_mem_blocked_next = (flush_alu)    ? 1'b0 :
+assign req_wb_mem_blocked_next = (flush_alu)       ? 1'b0 :
+                                 (stall_decode)    ? 1'b0 : 
+                                 (stall_decode_ff) ? wb_mem_blocked_type : // was blocked waiting for reg value
+                                                     req_alu_valid & wb_mem_blocked_type;
 
-                                 (  stall_decode &
-                                   & !stall_decode_next    ) ? wb_mem_blocked_type : // was blocked waiting for reg value
-                                 
-                                 (stall_decode) ? 1'b0 : 
-                                                  req_alu_valid & wb_mem_blocked_type;
+assign req_wb_mem_blocked = req_wb_mem_blocked_ff;
 
-assign req_wb_mem_blocked = (  flush_alu 
-                             | stall_decode) ? 1'b0 : 
-                                               req_wb_mem_blocked_ff;
-
-assign req_wb_dcache_info = (stall_decode | flush_alu) ? req_wb_dcache_info :req_dcache_info_ff;
+assign req_wb_dcache_info = req_dcache_info_ff;
                                                   
 // Request to D$ stage in case ST/LD is the oldest instr on the pipe                                                  
 logic dcache_mem_type;
-assign dcache_mem_type =  is_m_type_instr(req_alu_info.opcode)
-                                                & dcache_ready
-                                                & (rob_tail == req_alu_instr_id);
+assign dcache_mem_type =   is_m_type_instr(req_alu_info.opcode)
+                         & dcache_ready
+                         & (rob_tail == req_alu_instr_id);
 
-assign req_dcache_valid_next = ( flush_alu           )    ? 1'b0 :
-     
-                               (  stall_decode 
-                                & !stall_decode_next ) ? dcache_mem_type : // was blocked waiting for reg value
-
+assign req_dcache_valid_next = ( flush_alu           )    ? 1'b0 :     
                                ( stall_decode        ) ? 1'b0 : 
-
+                               (  stall_decode_ff    ) ? dcache_mem_type : // was blocked waiting for reg value
                                (  fetch_xcpt_valid
-                                | decode_xcpt_valid  ) ? 1'b0 : 
+                                | decode_xcpt_valid  ) ? 1'b0 :
+                                                         req_alu_valid & dcache_mem_type;
 
-                                                          req_alu_valid 
-                                                        & dcache_mem_type;
+assign req_dcache_valid = req_dcache_valid_ff;
 
-assign req_dcache_valid = (  !dcache_ready 
-                           | flush_alu 
-                           | stall_decode) ? 1'b0 : 
-                                             req_dcache_valid_ff;
-
-assign req_dcache_info  =(  !dcache_ready 
-                           | flush_alu 
-                           | stall_decode) ? req_dcache_info : req_dcache_info_ff;
+assign req_dcache_info  = req_dcache_info_ff;
 
 
 ////////////////////////////////////
@@ -152,6 +134,7 @@ assign alu_to_wb_intr = (  is_r_type_instr(req_alu_info.opcode)
                          | is_mov_instr(req_alu_info.opcode) 
                          | is_branch_type_instr(req_alu_info.opcode) 
                          | is_jump_instr(req_alu_info.opcode) 
+                         | is_iret_instr(req_alu_info.opcode) 
                          | is_tlb_instr(req_alu_info.opcode));
 
 // TLB write request
@@ -171,19 +154,16 @@ writeback_request_t req_wb_info_ff;
 `RST_FF(clock, reset | flush_alu, req_wb_info_ff,  req_wb_info_next,  '0)
 
 assign req_wb_valid_next = ( flush_alu              ) ? 1'b0 :
-
-                           (  stall_decode &
-                            & !stall_decode_next    ) ? alu_to_wb_intr : // was blocked waiting for reg value
-
                            ( stall_decode           ) ? 1'b0 :
+                           (  stall_decode_ff       ) ? alu_to_wb_intr : // was blocked waiting for reg value
                            (  fetch_xcpt_valid
                             | decode_xcpt_valid     ) ? 1'b1 : 
                                                         req_alu_valid & alu_to_wb_intr;
 
-assign req_wb_valid = (flush_alu | stall_decode) ? 1'b0 : req_wb_valid_ff;
+assign req_wb_valid = req_wb_valid_ff;
 
-
-assign req_wb_info  = (flush_alu | stall_decode) ? '0 : req_wb_info_ff;
+// xcpt must be 0
+assign req_wb_info  = req_wb_info_ff;
 
 logic   [`REG_FILE_DATA_RANGE]  rf_data;
 
@@ -253,11 +233,19 @@ logic   [`REG_FILE_DATA_RANGE]  rob_src2_data_ff;
 
 always_comb
 begin
-    rob_blocks_src1     = req_alu_info.rob_blocks_src1;
-    rob_blocks_src2     = req_alu_info.rob_blocks_src2;
-    stall_decode_next   = stall_decode;
+    // Bypass values from RoB
+    rob_src1_id = req_alu_info.ticket_src1;
+    rob_src2_id = req_alu_info.ticket_src2;
+ 
+    rob_blocks_src1  = req_alu_info.rob_blocks_src1;
+    rob_blocks_src2  = req_alu_info.rob_blocks_src2;
 
-    if ( stall_decode )
+    rob_src1_found_next = rob_src1_found_ff;
+    rob_src2_found_next = rob_src2_found_ff;
+
+    stall_decode    = stall_decode_ff;
+
+    if ( stall_decode_ff )
     begin
         // Check if there is a hit on this cycle and store the hit, only if we
         // did not hit last cycle
@@ -266,40 +254,41 @@ begin
 
         if (!rob_src2_found_ff)
             rob_src2_found_next = rob_src2_hit;
-
+    
         // Check if we can unblock decode stage
         if (rob_blocks_src1 & rob_blocks_src2)
         begin
-            stall_decode_next =!(  (rob_src1_found_ff | rob_src1_hit)
-                                 & (rob_src2_found_ff | rob_src2_hit));
+            stall_decode =!(  (rob_src1_found_ff | rob_src1_hit)
+                            & (rob_src2_found_ff | rob_src2_hit));
         end
         else if ( rob_blocks_src1 )
         begin
-            stall_decode_next = !(rob_src1_found_ff | rob_src1_hit);
+            stall_decode = !(rob_src1_found_ff | rob_src1_hit);
         end
         else // if ( rob_blocks_src2 )
         begin
-            stall_decode_next = !(rob_src2_found_ff | rob_src2_hit);
+            stall_decode = !(rob_src2_found_ff | rob_src2_hit);
         end
-    end // stall_decode
-
-    // If !stall_decode
-    else 
-    begin
-        stall_decode_next = (  fetch_xcpt_valid
-                             | decode_xcpt_valid ) ? 1'b0 : 
-                            ( req_alu_valid      ) ?  (  rob_blocks_src1 
-                                                       & (req_alu_info.ticket_src1 != req_alu_instr_id)
-                                                       & !rob_src1_hit ) 
-                                                    | (  rob_blocks_src2 
-                                                       & (req_alu_info.ticket_src2 != req_alu_instr_id)
-                                                       & !rob_src2_hit ) : 
-                                                    1'b0;
-    
+    end // stall_decode_ff
+    else
+    begin   
         rob_src1_found_next = rob_src1_hit;
         rob_src2_found_next = rob_src2_hit;
-    end
+        stall_decode     = ( fetch_xcpt_valid | decode_xcpt_valid ) ? 1'b0 : 
+                           ( !req_alu_valid ) ? 1'b0 :  
+                                               //  take_branch_next |
+                                                 (rob_blocks_src1 & !rob_src1_hit)
+                                               | (rob_blocks_src2 & !rob_src2_hit);
 
+                                                /*
+                                                 |                           
+                                               (  rob_blocks_src1  & !rob_src1_hit
+                                                &(req_alu_info.ticket_src1 != req_alu_instr_id)) 
+                                              |(  rob_blocks_src2 & !rob_src2_hit
+                                                &(req_alu_info.ticket_src2 != req_alu_instr_id));
+
+                                                */
+    end
 end
 
 always_comb
@@ -323,20 +312,27 @@ begin
     xcpt_alu.xcpt_overflow = 1'b0 ;
     xcpt_alu.xcpt_pc       = req_alu_pc;
 
-    // Bypass values from RoB
-    rob_src1_id = req_alu_info.ticket_src1;
-    rob_src2_id = req_alu_info.ticket_src2;
-
+    /*
     ra_data = (  rob_blocks_src1
                & (req_alu_info.ticket_src1 != req_alu_instr_id)) ? (rob_src1_hit) ? rob_src1_data    : 
                                                                                     rob_src1_data_ff :
                                                                     req_alu_info.ra_data;
 
+
     rb_data = (   rob_blocks_src2
                & (req_alu_info.ticket_src2 != req_alu_instr_id)) ? (rob_src2_hit) ? rob_src2_data    : 
                                                                                     rob_src2_data_ff :
                                                                    req_alu_info.rb_data;
-            
+    */
+    ra_data = ( rob_blocks_src1 ) ? (rob_src1_hit) ? rob_src1_data    : 
+                                                     rob_src1_data_ff :
+                                     req_alu_info.ra_data;
+
+
+    rb_data = ( rob_blocks_src2 ) ? (rob_src2_hit) ? rob_src2_data    : 
+                                                     rob_src2_data_ff :
+                                    req_alu_info.rb_data;
+
     // TLB
     tlb_req_valid_next  = 1'b0;
 
@@ -400,7 +396,7 @@ begin
         if (ra_data == rb_data)
         begin
             branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
-		    take_branch_next = req_alu_valid & !stall_decode_next;
+		    take_branch_next = req_alu_valid;
         end
 	end
     // BNE
@@ -409,7 +405,7 @@ begin
         if (ra_data != rb_data)
         begin
             branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
-		    take_branch_next = req_alu_valid & !stall_decode_next;
+		    take_branch_next = req_alu_valid;
         end
 	end
     // BLT
@@ -418,7 +414,7 @@ begin
         if (ra_data < rb_data)
         begin
             branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
-		    take_branch_next = req_alu_valid & !stall_decode_next;
+		    take_branch_next = req_alu_valid;
         end
 	end
     // BGT
@@ -427,7 +423,7 @@ begin
         if (ra_data > rb_data)
         begin
             branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
-		    take_branch_next = req_alu_valid & !stall_decode_next;
+		    take_branch_next = req_alu_valid;
         end
 	end
     // BLE
@@ -436,7 +432,7 @@ begin
         if (ra_data <= rb_data)
         begin
             branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
-		    take_branch_next = req_alu_valid & !stall_decode_next;
+		    take_branch_next = req_alu_valid;
         end
 	end
     // BGE
@@ -445,7 +441,7 @@ begin
         if (ra_data >= rb_data)
         begin
             branch_pc_next   = `ZX(`PC_WIDTH,req_alu_info.offset);
-		    take_branch_next = req_alu_valid & !stall_decode_next;
+		    take_branch_next = req_alu_valid;
         end
 	end
     // JUMP
