@@ -12,3 +12,14 @@ How to run?
 How to open the generated waveform?
     
     gtkwave trace.vcd
+
+
+TESTS:
+How to generate new *a*,*b* and *c* matrixs? (a x b = c)
+    python matrixGenerator.py
+    python mxmValidator.py
+
+//NOTE: In matrixGenerator you can indicate the maximum randon number that the
+//matrixGenerator can assing to matrix *a* and *b* (randint(0, X)), if the number is to big 
+//the mxmValidator will complain because the result is bigger than 32 bits.
+
