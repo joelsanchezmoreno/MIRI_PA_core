@@ -213,7 +213,7 @@ logic flush_decode_ff;
 always_comb
 begin
    // Maintain values from 2 cycles ago for restore purposes
-    reg_blocked_valid_next_2   = (flush_decode) ? reg_blocked_valid_ff_2 : reg_blocked_valid_ff;
+    reg_blocked_valid_next_2   = (flush_decode | flush_decode_ff) ? reg_blocked_valid_ff_2 : reg_blocked_valid_ff;
     reg_rob_id_next_2          = (flush_decode | flush_decode_ff) ? reg_rob_id_ff_2 : reg_rob_id_ff;
 
     // Mantain values from previous cycle by default
