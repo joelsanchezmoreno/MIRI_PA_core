@@ -316,8 +316,10 @@ begin
         end
         else
         begin
+            `ifdef VERBOSE_ROB
             $display("[ROB] ALU TO WB TO STORE DCACHE REQUEST");
             $display("[ROB] instr_id is %h",mem_instr_info.instr_id);
+            `endif
 
             alu_free_pos = mem_instr_info.instr_id;
             reorder_buffer_mem_instr_blocked[alu_free_pos]  = 1'b1;
