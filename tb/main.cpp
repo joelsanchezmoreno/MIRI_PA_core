@@ -6,7 +6,7 @@
 #include "top_module.h"
 #include VTOP_MODULE_HEADER
 
-#define DEFAULT_NUM_CYCLES 2000
+#define DEFAULT_NUM_CYCLES 100000000000000000000000000
 
 
 // Usage function
@@ -79,6 +79,7 @@ int main(int argc, char *argv[])
     argv += optind;
 
     Verilated::commandArgs(argc, argv);
+    Verilated::debug(1);
 
     core_tb->initializeTracing("trace.vcd");
     core_tb->reset_tb_top();

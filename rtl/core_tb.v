@@ -230,16 +230,23 @@ begin
     rsp_mm_bus_error <= 1'b0;
 
     if (reset_i)
-    begin 
-    	$readmemh("data_input_file.hex", main_memory, `MM_BOOT_ADDR);
-        $display("[CORE TB] Main memory loaded. PC@'h0 =  %h",main_memory[0]);          
-        $display("[CORE TB] Main memory loaded. PC@'h1 =  %h",main_memory[1]);          
-        $display("[CORE TB] Main memory loaded. PC@'h1000 = %h",main_memory['h1000 >> `ICACHE_RSH_VAL]);          
-        $display("[CORE TB] Main memory loaded. PC@'h1010 = %h",main_memory['h1010 >> `ICACHE_RSH_VAL]);          
-        $display("[CORE TB] Main memory loaded. PC@'h1020 = %h",main_memory['h1020 >> `ICACHE_RSH_VAL]);          
-        $display("[CORE TB] Main memory loaded. PC@'h1030 = %h",main_memory['h1030 >> `ICACHE_RSH_VAL]);          
-        $display("[CORE TB] Main memory loaded. PC@'h1800 = %h",main_memory['h1800 >> `ICACHE_RSH_VAL]);          
-        $display("[CORE TB] Main memory loaded. PC@'h2000 = %h",main_memory['h2000 >> `ICACHE_RSH_VAL]);          
+    begin
+        `ifdef MATRIX_MULTIPLY_TEST
+    	    $readmemh("tests/matrix_multiply.hex", main_memory, `MM_BOOT_ADDR);
+    	    $readmemh("tests/data_in_MxM_C.hex", main_memory, `MM_MATRIX_C_ADDR);
+    	    $readmemh("tests/data_in_MxM_A.hex", main_memory, `MM_MATRIX_A_ADDR);
+    	    $readmemh("tests/data_in_MxM_B.hex", main_memory, `MM_MATRIX_B_ADDR);
+        `else
+    	    $readmemh("data_input_file.hex", main_memory, `MM_BOOT_ADDR);
+        `endif
+         $display("[CORE TB] Main memory loaded.");
+         $display("           Source code. PC@'h1000 = %h",main_memory['h1000 >> `ICACHE_RSH_VAL]);
+         $display("Exception handler code. PC@'h2000 = %h",main_memory['h2000 >> `ICACHE_RSH_VAL]);
+        `ifdef MATRIX_MULTIPLY_TEST
+            $display("              Matrix C. PC@'h3000  = %h",main_memory['h3000 >> `ICACHE_RSH_VAL]);
+            $display("              Matrix A. PC@'h13000 = %h",main_memory['h13000 >> `ICACHE_RSH_VAL]);
+            $display("              Matrix B. PC@'h23000 = %h",main_memory['h23000 >> `ICACHE_RSH_VAL]);
+        `endif        
         $display("------------------------------------------");          
         $display("------------------------------------------");          
     end
@@ -252,7 +259,7 @@ begin
             // Send response to the core arbiter
             rsp_mm_valid  <= 1'b1;
 
-            if (req_mm_info_ff.addr >=  `MAIN_MEMORY_DEPTH ) 
+            if (req_mm_info_ff.addr >=  (`MAIN_MEMORY_DEPTH*`MAIN_MEMORY_LINE_SIZE) ) 
             begin
                 rsp_mm_bus_error <= 1'b1;
             end
@@ -309,11 +316,10 @@ begin
         end
     end
 
-    if ( rsp_mm_data == '1 & rsp_mm_valid)
+    if ( rsp_mm_data == '1 & rsp_mm_valid & !dcache_req_valid_ff)
     begin
         $display("[CORE TB] Finishing simulation, we found all NOPs on memory");
 
-        //FIXME: REVIEW
         for (iter_out = `MM_BOOT_ADDR; iter_out < `MAIN_MEMORY_DEPTH; iter_out++)
             $fwrite(out_file,"%h\n", main_memory[iter_out]);
         $fclose(out_file);
