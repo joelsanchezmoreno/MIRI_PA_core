@@ -233,7 +233,6 @@ begin
     begin
         `ifdef MATRIX_MULTIPLY_TEST
     	    $readmemh("tests/matrix_multiply/verilator_MxM_src_code.hex", main_memory, `MM_BOOT_ADDR);
-    	    $readmemh("tests/matrix_multiply/data_in_MxM_C.hex", main_memory, `MM_MATRIX_C_ADDR);
     	    $readmemh("tests/matrix_multiply/data_in_MxM_A.hex", main_memory, `MM_MATRIX_A_ADDR);
     	    $readmemh("tests/matrix_multiply/data_in_MxM_B.hex", main_memory, `MM_MATRIX_B_ADDR);
         `else
