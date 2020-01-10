@@ -1,17 +1,17 @@
 #include "coreTB.hpp"
 
 coreTB::coreTB(VTOP_MODULE *top) :
-	top(top), timeStamp(0), vcd_trace(nullptr)
+	top(top), timeStamp(0), trace(nullptr)
 {
 }
 
 coreTB::~coreTB()
 {
     // Enable trace dumping to FST format
-	if (vcd_trace) {
-		vcd_trace->dump(timeStamp);
-		vcd_trace->close();
-		delete vcd_trace;
+	if (trace) {
+		trace->dump(timeStamp);
+		trace->close();
+		delete trace;
 	}
 }
 
@@ -25,8 +25,8 @@ uint64_t coreTB::getTimeStamp(void)
 void coreTB::advanceTimeStamp(void)
 {
     // In case of waveform dump the given timeStamp
-	if (vcd_trace)
-		vcd_trace->dump(timeStamp);
+	if (trace)
+		trace->dump(timeStamp);
 
     // Increase the timeStamp
 	timeStamp++;
@@ -80,28 +80,29 @@ void coreTB::generate_pulse(void)
 	advanceTimeStamp();
 }
 
-// Initialize the VCD waveform openning the trace
-void coreTB::initializeTracing(const char *vcdname)
+// Initialize the waveform openning the trace
+void coreTB::initializeTracing(const char *trace_name)
 {
-	if (vcd_trace)
+	if (trace)
 		return;
 
 	Verilated::traceEverOn(true);
 
-	vcd_trace = new VerilatedVcdC;
+	//trace = new VerilatedVcdC;
+	trace = new VerilatedFstC;
 
-    if (!vcd_trace)
+    if (!trace)
 		return;
 
-	top->trace(vcd_trace, 99);
-    vcd_trace->open(vcdname);
+	top->trace(trace, 99);
+    trace->open(trace_name);
 }
 
 void coreTB::close_trace(void) 
 {
-	if (vcd_trace) {
-		vcd_trace->close();
-		vcd_trace = NULL;
+	if (trace) {
+		trace->close();
+		trace = NULL;
 	}
 }
 

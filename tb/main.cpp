@@ -4,9 +4,10 @@
 #include <verilated.h>
 #include "coreTB.hpp"
 #include "top_module.h"
+#include <inttypes.h>
 #include VTOP_MODULE_HEADER
 
-#define DEFAULT_NUM_CYCLES 100000000000000000000000000
+#define DEFAULT_NUM_CYCLES 1000000000000000000
 
 
 // Usage function
@@ -81,7 +82,11 @@ int main(int argc, char *argv[])
     Verilated::commandArgs(argc, argv);
     Verilated::debug(1);
 
-    core_tb->initializeTracing("trace.vcd");
+    int trace_en = 1;
+    if (trace_en) {
+        //core_tb->initializeTracing("trace.vcd");
+        core_tb->initializeTracing("trace.fst");
+    }
     core_tb->reset_tb_top();
 
     // Check if we still have cycles to run.
@@ -89,7 +94,15 @@ int main(int argc, char *argv[])
         core_tb->generate_pulse();
     }
 
-    core_tb->close_trace();
+    if (trace_en){
+        core_tb->close_trace();
+    }
+
+    printf( "----------------------\n");
+    printf( "Execution has finished\n"
+            "TimeStamp value is: %" PRId64 "\n",core_tb->getTimeStamp());
+    printf( "----------------------\n");
+
     top->final();
     delete core_tb;
     delete top;

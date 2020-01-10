@@ -1,7 +1,7 @@
 VERILATOR ?= verilator
 
 TOP_MODULE = core_tb
-TRACE_FILE = trace.vcd # GTKWwave format
+TRACE_FILE = trace.fst # GTKWwave format
 
 VERILOG_HEADERS= rtl/inc
 VERILOG_SOURCES = $(shell find rtl -name *.v -o -name *.sv )
@@ -26,7 +26,7 @@ all: lint
 
 #### Verilator ####
 obj_dir/$(VERILATOR_VTOP): $(VERILOG_SOURCES) $(VERILATOR_TB_SOURCES)
-	$(VERILATOR) $(VERILATOR_FLAGS) -CFLAGS "$(CFLAGS)"  -I$(VERILOG_HEADERS) --trace --trace-structs --cc --exe $^
+	$(VERILATOR) $(VERILATOR_FLAGS) -CFLAGS "$(CFLAGS)"  -I$(VERILOG_HEADERS) --trace-fst --trace-structs --cc --exe $^
 	make -j4 -k -C obj_dir -f $(VERILATOR_VTOP).mk $(VERILATOR_VTOP)
 	chmod -R g+w,o+w obj_dir
 
@@ -46,29 +46,7 @@ $(TRACE_FILE): run
 gtkwave: $(TRACE_FILE)
 	@gtkwave $(TRACE_FILE) trace.sav
 
-#### Tests ####
-
-run-memcpy: memcpy.bin obj_dir/$(VERILATOR_VTOP)
-	@hexdump $(HEXDUMP_FLAGS) $< > memory.hex.txt
-	@obj_dir/$(VERILATOR_VTOP) -m 20000 $(ARGS)
-
-memcpy.elf: test/start.s test/memcpy.c
-	riscv64-unknown-elf-gcc -T test/linker.ld $(TEST_CFLAGS) $^ -o $@
-
-run-matrix_multiply: matrix_multiply.bin obj_dir/$(VERILATOR_VTOP)
-	@hexdump $(HEXDUMP_FLAGS) $< > memory.hex.txt
-	@obj_dir/$(VERILATOR_VTOP) -m 100000 $(ARGS)
-
-matrix_multiply.elf: test/start.s test/matrix_multiply.c
-	riscv64-unknown-elf-gcc -T test/linker.ld $(TEST_CFLAGS) $^ -o $@
-
 #### Common rules ####
-%.bin: %.elf
-	@riscv64-unknown-elf-objcopy -S -O binary $^ $@
-
-%.hex.txt: %.bin
-	@hexdump $(HEXDUMP_FLAGS) $< > $@
-
 clean: 
 	@rm -rf obj_dir work $(TRACE_FILE) $(TRACE_FILE).hier *.elf *.bin *.hex.txt \
 		vsim.wlf transcript
