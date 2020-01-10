@@ -49,13 +49,14 @@ if __name__== "__main__":
     output = ""
 
     for i in range(1,129):
-        for j in range(1,33):
+        j = 1
+        while j < 129:
 
             value0 = hex(c[i][j]).replace('0x','').zfill(8)
             value1 = hex(c[i][j+1]).replace('0x','').zfill(8)
             value2 = hex(c[i][j+2]).replace('0x','').zfill(8)
             value3 = hex(c[i][j+3]).replace('0x','').zfill(8)
-
+            j+=4
             # Check overflow
             if  len(value0) > 8  or len(value1) > 8  or len(value2) > 8  or len(value3) > 8  :
                 print("Value bigger than 32 bits")
