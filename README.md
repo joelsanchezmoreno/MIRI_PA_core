@@ -16,10 +16,11 @@ How to open the generated waveform?
 
 TESTS:
 How to generate new *a*,*b* and *c* matrixs? (a x b = c)
+
     python matrixGenerator.py
     python mxmValidator.py
 
 //NOTE: In matrixGenerator you can indicate the maximum randon number that the
 //matrixGenerator can assing to matrix *a* and *b* (randint(0, X)), if the number is to big 
-//the mxmValidator will complain because the result is bigger than 32 bits.
+//the mxmValidator will complain because there will be results bigger than 32 bits.
 
