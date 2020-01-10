@@ -38,19 +38,6 @@ if __name__== "__main__":
     fnInput1.close()
     fnInput2.close()
 
-    print("PRINT MATRIX A")
-    print("a[1][1] =",a[1][1])
-    print("a[1][2] =",a[1][2])
-    print("a[1][3] =",a[1][3])
-    print("a[1][4] =",a[1][4])
-    print("-----------------")
-    print("PRINT MATRIX B")
-    print("b[1][1] =",b[1][1])
-    print("b[1][2] =",b[1][2])
-    print("b[1][3] =",b[1][3])
-    print("b[1][4] =",b[1][4])
-    print("-----------------")
-
     c = [[0 for x in range(n)] for i in range(n)] 
     
     for i in range(n):
@@ -75,14 +62,6 @@ if __name__== "__main__":
 
             output += value3 + value2 + value1 + value0
             output += '\n'
-
-            if i == 1 and j == 1:
-                print("PRINT MATRIX C")
-                print("c[1][1] = ",hex(c[1][1]))
-                print("c[1][2] = ",hex(c[1][2]))
-                print("c[1][3] = ",hex(c[1][3]))
-                print("c[1][4] = ",hex(c[1][4]))
-
     
     fnOutput = open("data_golden_MxM_C.hex","w")
     fnOutput.write(output)
