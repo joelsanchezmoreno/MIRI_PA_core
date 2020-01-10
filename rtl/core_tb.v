@@ -232,10 +232,10 @@ begin
     if (reset_i)
     begin
         `ifdef MATRIX_MULTIPLY_TEST
-    	    $readmemh("tests/matrix_multiply.hex", main_memory, `MM_BOOT_ADDR);
-    	    $readmemh("tests/data_in_MxM_C.hex", main_memory, `MM_MATRIX_C_ADDR);
-    	    $readmemh("tests/data_in_MxM_A.hex", main_memory, `MM_MATRIX_A_ADDR);
-    	    $readmemh("tests/data_in_MxM_B.hex", main_memory, `MM_MATRIX_B_ADDR);
+    	    $readmemh("tests/matrix_multiply/verilator_MxM_src_code.hex", main_memory, `MM_BOOT_ADDR);
+    	    $readmemh("tests/matrix_multiply/data_in_MxM_C.hex", main_memory, `MM_MATRIX_C_ADDR);
+    	    $readmemh("tests/matrix_multiply/data_in_MxM_A.hex", main_memory, `MM_MATRIX_A_ADDR);
+    	    $readmemh("tests/matrix_multiply/data_in_MxM_B.hex", main_memory, `MM_MATRIX_B_ADDR);
         `else
     	    $readmemh("data_input_file.hex", main_memory, `MM_BOOT_ADDR);
         `endif
@@ -268,7 +268,7 @@ begin
                 // Load
                 if (!req_mm_info_ff.is_store)
                 begin
-                    `ifdef VERBOSE_CORETB       
+                    `ifdef VERBOSE_CORETB_MM       
                         $display("[CORE TB] Main memory LD to address %h",req_mm_info_ff.addr );  
                     `endif             
                     rsp_mm_data <= main_memory[req_mm_info_ff.addr];
@@ -276,6 +276,9 @@ begin
                 //Store
                 else
                 begin
+                    `ifdef VERBOSE_CORETB_MM       
+                        $display("[CORE TB] Main memory ST to address %h with data %h",req_mm_info_ff.addr,req_mm_info_ff.data);  
+                    `endif   
         	        main_memory[req_mm_info_ff.addr] <= req_mm_info_ff.data;
                 end
             end
@@ -290,7 +293,11 @@ integer out_file,iter_out;
 
 initial
 begin
-    out_file = $fopen("data_output_file.hex","w");  
+    `ifdef MATRIX_MULTIPLY_TEST
+        out_file = $fopen("tests/matrix_multiply/verilator_matrix_C.hex","w");  
+    `else
+        out_file = $fopen("data_output_file.hex","w");  
+    `endif
 end
 
 always_ff @(posedge clk_i) 
@@ -302,7 +309,9 @@ begin
         if ( mem_req_count_ff >= `LATENCY_MM_REQ-1 &
              rsp_mm_valid)
         begin
-            $display("[CORE TB] Response arbiter. Data to D$ %h",rsp_mm_data);                               
+            `ifdef VERBOSE_CORETB_MM
+            $display("[CORE TB] Response arbiter. Data to D$ %h",rsp_mm_data);     
+            `endif            
         end
     end
 
@@ -312,7 +321,9 @@ begin
     begin
         if ( mem_req_count_ff >= `LATENCY_MM_REQ-1 & rsp_mm_valid)
         begin     
-            $display("[CORE TB] Response arbiter. Data to I$ %h",rsp_mm_data);   
+            `ifdef VERBOSE_CORETB_MM
+            $display("[CORE TB] Response arbiter. Data to I$ %h",rsp_mm_data);  
+            `endif 
         end
     end
 
@@ -320,8 +331,14 @@ begin
     begin
         $display("[CORE TB] Finishing simulation, we found all NOPs on memory");
 
-        for (iter_out = `MM_BOOT_ADDR; iter_out < `MAIN_MEMORY_DEPTH; iter_out++)
-            $fwrite(out_file,"%h\n", main_memory[iter_out]);
+        `ifndef MATRIX_MULTIPLY_TEST
+            for (iter_out = `MM_BOOT_ADDR; iter_out < `MAIN_MEMORY_DEPTH; iter_out++)
+                $fwrite(out_file,"%h\n", main_memory[iter_out]);
+        `else
+            for (iter_out = `MM_BOOT_ADDR; iter_out < `MAIN_MEMORY_DEPTH; iter_out++)
+            //for (iter_out = `MATRIX_C_ADDR; iter_out < `MATRIX_A_ADDR; iter_out++)
+                $fwrite(out_file,"%h\n", main_memory[iter_out]);
+        `endif
         $fclose(out_file);
 
         $finish;
