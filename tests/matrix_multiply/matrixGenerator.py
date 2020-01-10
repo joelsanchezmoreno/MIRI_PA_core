@@ -1,17 +1,17 @@
 import sys
 import random
 if __name__== "__main__":
-    n = 129
-    a = [[random.randint(0,10000) for j in range(n)] for i in range(n)]
-    b = [[random.randint(0,10000) for j in range(n)] for i in range(n)]
+    n = 5
+    a = [[random.randint(0,10) for j in range(n)] for i in range(n)]
+    b = [[random.randint(0,10) for j in range(n)] for i in range(n)]
     c = [[random.randint(0,0) for j in range(n)] for i in range(n)]
 
     outputA = ""
     outputB = ""
     outputC = ""
 
-    for i in range(1,129):
-        for j in range(1,129):
+    for i in range(1,n):
+        for j in range(1,n):
             valueA = hex(a[i][j]).replace('0x','').zfill(8)
             valueB = hex(b[i][j]).replace('0x','').zfill(8)
             valueC = hex(c[i][j]).replace('0x','').zfill(8)
