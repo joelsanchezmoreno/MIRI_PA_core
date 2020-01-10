@@ -403,10 +403,12 @@ begin
                     req_set    = pending_req_ff.addr[`DCACHE_SET_ADDR_RANGE]; 
                     req_size   = pending_req_ff.size;
 
-                    // If it was a ST, we modify the received line
+                    // If it was a ST, we modify the received line and put
+                    // that line as dirty
                     if (pending_req_ff.is_store)
                     begin
                         dCache_data[req_target_pos_ff]  = rsp_data_miss; 
+                        dCache_dirty[req_target_pos_ff] = 1'b1; 
                         if ( req_size == Byte)
                         begin
                             req_offset = pending_req_ff.addr[`DCACHE_OFFSET_ADDR_RANGE];
