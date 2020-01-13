@@ -301,20 +301,21 @@ What does this check:
 Result: Working as expected                  
 
 ///////////////////////////////////////////////////////////////////////////
-// Exception handler testing with cache bus error
+// Exception handler testing with overflow error
 
 Test name: xcpt_handler_tlb.hex
 
 #########
 ### Code to generate the xcpt
-#1000:  ADDI R28,R28,0x6BCD         0
-#1004:  ADDI R29,R29,0x6BCD         1
-#1008:  ADDI R30,R30,0x6BCD         2
-#100C:  ADDI R5, R5, 0x6BCD         3
-#1010:  ADDI R6, R6, 0x6BCD         4
-#1014:  LDW R0,0x1030(R0)           5
-#1018:  LDW R1,0x0(R0)              6
-#101c:  ADDI R2,R2,0x1000
+#1000:  ADDI R28,R28,0x6BCD         
+#1004:  ADDI R29,R29,0x6BCD         
+#1008:  ADDI R30,R30,0x6BCD         
+#100C:  ADDI R5, R5, 0x6BCD         
+#1010:  ADDI R6, R6, 0x6BCD         
+#1014:  ADDI R0, R0, 0x7FFF         
+#1018:  SLL  R0, R0, 0xFF           
+#101C:  LDW R1,0x0(R0)              
+#1020:  ADDI R2,R2,0x1000
     
 #########
 ### Exception handler
@@ -361,7 +362,7 @@ Test name: xcpt_handler_tlb.hex
 
 #########
 What does this check: 
-    - The src code will produce a cache bus error exception when trying to LD from incorrect address.
+    - The src code will produce an overflow exception when to shifth R0.
     - This will force the core to jump to the exception handler at address 0x2000
         - Then, this will save the values for R28,R29,R30.
         - Next, it will NOT hit on iTLB so it will jump to 0x204C.
@@ -408,7 +409,7 @@ What does this check:
       on iTLB and it will return phy addr 0x3040. It will try to fetch from there and it read NOPs.
  
 - If evertyhing goes as expected we should see the next values on the registers:
-        - R2  = 0x1000
+        - R2  = 0x07FFF
         - R5  = 0x6BCD
         - R6  = 0x6BCD
         - R7  = 0xABCDEF01

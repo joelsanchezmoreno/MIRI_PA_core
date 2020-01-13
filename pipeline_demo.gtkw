@@ -1,0 +1,712 @@
+[*]
+[*] GTKWave Analyzer v3.3.61 (w)1999-2014 BSI
+[*] Mon Jan 13 17:28:22 2020
+[*]
+[dumpfile] "/home/jsanchez/esperanto_aux/PA-MIPS-Processor/trace.fst"
+[dumpfile_mtime] "Mon Jan 13 17:23:11 2020"
+[dumpfile_size] 85438
+[savefile] "/home/jsanchez/esperanto_aux/PA-MIPS-Processor/pipeline_demo.gtkw"
+[timestart] 0
+[size] 2560 981
+[pos] -1 -1
+*-6.946068 299 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[treeopen] TOP.core_tb.
+[treeopen] TOP.core_tb.core_top.
+[treeopen] TOP.core_tb.core_top.cache_top.dcache.
+[treeopen] TOP.core_tb.core_top.decode_top.
+[treeopen] TOP.core_tb.core_top.mul_top.req_wb_info.
+[treeopen] TOP.core_tb.core_top.wb_top.
+[sst_width] 329
+[signals_width] 546
+[sst_expanded] 1
+[sst_vpaned_height] 460
+@28
+TOP.core_tb.core_top.fetch_top.clock
+TOP.core_tb.core_top.fetch_top.reset
+@c00200
+-CORE TB
+@28
+TOP.core_tb.dcache_req_valid_miss
+TOP.core_tb.icache_req_valid_miss
+TOP.core_tb.mem_req_count[2:0]
+TOP.core_tb.mem_rsp_count[2:0]
+@800200
+-req/rsp MM
+@28
+TOP.core_tb.req_mm_valid
+@800200
+-req_mm_info
+@22
+TOP.core_tb.req_mm_info.addr[19:0]
+TOP.core_tb.req_mm_info.data[127:0]
+@28
+TOP.core_tb.req_mm_info.is_store
+@1000200
+-req_mm_info
+@28
+TOP.core_tb.rsp_mm_valid
+@800200
+-rsp_mm_info
+@28
+TOP.core_tb.rsp_bus_error
+TOP.core_tb.rsp_cache_id
+@22
+TOP.core_tb.rsp_mm_data[127:0]
+@1000200
+-rsp_mm_info
+-req/rsp MM
+@1401200
+-CORE TB
+@c00200
+-fetch -- main memory
+@28
+TOP.core_tb.core_top.fetch_top.req_valid_miss
+@22
+TOP.core_tb.core_top.fetch_top.req_info_miss.addr[19:0]
+@28
+TOP.core_tb.core_top.fetch_top.rsp_valid_miss
+@22
+TOP.core_tb.core_top.fetch_top.rsp_data_miss[127:0]
+@1401200
+-fetch -- main memory
+@c00200
+-fetch internal signals
+-branch
+@28
+TOP.core_tb.core_top.fetch_top.take_branch
+@22
+TOP.core_tb.core_top.fetch_top.branch_pc[31:0]
+TOP.core_tb.core_top.fetch_top.program_counter[31:0]
+@1401200
+-branch
+@c00200
+-fetch pc
+@28
+TOP.core_tb.core_top.fetch_top.stall_fetch
+@22
+TOP.core_tb.core_top.fetch_top.program_counter[31:0]
+@28
+TOP.core_tb.core_top.fetch_top.program_counter_update
+@22
+TOP.core_tb.core_top.fetch_top.program_counter_next[31:0]
+@1401200
+-fetch pc
+-fetch internal signals
+@c00201
+-FETCH TO DECODE
+@28
+TOP.core_tb.core_top.fetch_top.stall_fetch
+TOP.core_tb.core_top.fetch_top.decode_instr_valid
+@22
+TOP.core_tb.core_top.fetch_top.decode_instr_pc[31:0]
+TOP.core_tb.core_top.fetch_top.decode_instr_data[31:0]
+@1401201
+-FETCH TO DECODE
+@200
+-
+@c00200
+-DECODE TO ALU
+@28
+TOP.core_tb.core_top.decode_top.req_to_alu_valid
+TOP.core_tb.core_top.decode_top.req_to_alu_instr_id[2:0]
+@22
+TOP.core_tb.core_top.decode_top.req_to_alu_pc[31:0]
+@28
+TOP.core_tb.core_top.decode_top.alu_decode_xcpt.xcpt_illegal_instr
+@c00200
+-req_to_alu_info
+@c00022
+TOP.core_tb.core_top.decode_top.req_to_alu_info.opcode[6:0]
+@28
+(0)TOP.core_tb.core_top.decode_top.req_to_alu_info.opcode[6:0]
+(1)TOP.core_tb.core_top.decode_top.req_to_alu_info.opcode[6:0]
+(2)TOP.core_tb.core_top.decode_top.req_to_alu_info.opcode[6:0]
+(3)TOP.core_tb.core_top.decode_top.req_to_alu_info.opcode[6:0]
+(4)TOP.core_tb.core_top.decode_top.req_to_alu_info.opcode[6:0]
+(5)TOP.core_tb.core_top.decode_top.req_to_alu_info.opcode[6:0]
+(6)TOP.core_tb.core_top.decode_top.req_to_alu_info.opcode[6:0]
+@1401200
+-group_end
+@22
+TOP.core_tb.core_top.decode_top.req_to_alu_info.rd_addr[4:0]
+TOP.core_tb.core_top.decode_top.req_to_alu_info.ra_addr[4:0]
+TOP.core_tb.core_top.decode_top.req_to_alu_info.rb_addr[4:0]
+TOP.core_tb.core_top.decode_top.req_to_alu_info.ra_data[31:0]
+TOP.core_tb.core_top.decode_top.req_to_alu_info.rb_data[31:0]
+TOP.core_tb.core_top.decode_top.req_to_alu_info.offset[19:0]
+@1401200
+-req_to_alu_info
+-DECODE TO ALU
+@c00200
+-Register File
+-write to RF
+@28
+TOP.core_tb.core_top.decode_top.writeEnRF
+@22
+TOP.core_tb.core_top.decode_top.destRF[4:0]
+@28
+TOP.core_tb.core_top.decode_top.write_idRF[2:0]
+@22
+TOP.core_tb.core_top.decode_top.writeValRF[31:0]
+@1401200
+-write to RF
+@c00200
+-xcpt to RF
+@28
+TOP.core_tb.core_top.decode_top.xcpt_type[2:0]
+TOP.core_tb.core_top.decode_top.xcpt_valid
+@22
+TOP.core_tb.core_top.decode_top.rmAddr[31:0]
+TOP.core_tb.core_top.decode_top.rmPC[31:0]
+@28
+TOP.core_tb.core_top.decode_top.write_idRF[2:0]
+@1401200
+-xcpt to RF
+@c00200
+-RF - registers
+@22
+TOP.core_tb.core_top.decode_top.registerFile.regMem(0)[31:0]
+TOP.core_tb.core_top.decode_top.registerFile.regMem(1)[31:0]
+TOP.core_tb.core_top.decode_top.registerFile.regMem(2)[31:0]
+TOP.core_tb.core_top.decode_top.registerFile.regMem(3)[31:0]
+TOP.core_tb.core_top.decode_top.registerFile.regMem(4)[31:0]
+@c00022
+TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+@28
+(0)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(1)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(2)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(3)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(4)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(5)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(6)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(7)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(8)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(9)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(10)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(11)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(12)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(13)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(14)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(15)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(16)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(17)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(18)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(19)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(20)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(21)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(22)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(23)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(24)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(25)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(26)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(27)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(28)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(29)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(30)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+(31)TOP.core_tb.core_top.decode_top.registerFile.regMem(5)[31:0]
+@1401200
+-group_end
+@22
+TOP.core_tb.core_top.decode_top.registerFile.regMem(6)[31:0]
+TOP.core_tb.core_top.decode_top.registerFile.regMem(7)[31:0]
+TOP.core_tb.core_top.decode_top.registerFile.regMem(15)[31:0]
+TOP.core_tb.core_top.decode_top.registerFile.regMem(28)[31:0]
+TOP.core_tb.core_top.decode_top.registerFile.regMem(29)[31:0]
+TOP.core_tb.core_top.decode_top.registerFile.regMem(30)[31:0]
+@1401200
+-RF - registers
+-Register File
+@c00200
+-DECODE TO MUL
+@28
+TOP.core_tb.core_top.decode_top.req_to_mul_valid
+@22
+TOP.core_tb.core_top.decode_top.req_to_mul_pc[31:0]
+@28
+TOP.core_tb.core_top.mul_top.req_mul_instr_id[2:0]
+@c00200
+-req_to_mul_info
+@22
+TOP.core_tb.core_top.decode_top.req_to_mul_info.ra_addr[4:0]
+TOP.core_tb.core_top.decode_top.req_to_mul_info.ra_data[31:0]
+TOP.core_tb.core_top.decode_top.req_to_mul_info.rb_addr[4:0]
+TOP.core_tb.core_top.decode_top.req_to_mul_info.rb_data[31:0]
+TOP.core_tb.core_top.decode_top.req_to_mul_info.rd_addr[4:0]
+@1401200
+-req_to_mul_info
+-DECODE TO MUL
+@c00200
+-ALU TO CACHE
+@28
+TOP.core_tb.core_top.alu_top.req_dcache_valid
+@c00022
+TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+@28
+(0)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(1)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(2)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(3)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(4)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(5)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(6)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(7)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(8)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(9)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(10)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(11)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(12)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(13)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(14)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(15)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(16)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(17)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(18)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(19)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(20)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(21)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(22)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(23)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(24)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(25)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(26)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(27)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(28)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(29)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(30)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+(31)TOP.core_tb.core_top.alu_top.req_dcache_info.pc[31:0]
+@1401200
+-group_end
+@28
+TOP.core_tb.core_top.alu_top.req_dcache_info.instr_id[2:0]
+@800200
+-req_dcache_info
+@22
+TOP.core_tb.core_top.alu_top.req_dcache_info.addr[31:0]
+@28
+TOP.core_tb.core_top.alu_top.req_dcache_info.is_store
+@22
+TOP.core_tb.core_top.alu_top.req_dcache_info.rd_addr[4:0]
+@28
+TOP.core_tb.core_top.alu_top.req_dcache_info.size[1:0]
+@22
+TOP.core_tb.core_top.alu_top.req_dcache_info.data[31:0]
+@1000200
+-req_dcache_info
+@1401200
+-ALU TO CACHE
+@c00200
+-ALU TO WRITEBACK
+@28
+TOP.core_tb.core_top.alu_top.req_wb_valid
+@c00028
+TOP.core_tb.core_top.alu_top.req_wb_info.instr_id[2:0]
+@28
+(0)TOP.core_tb.core_top.alu_top.req_wb_info.instr_id[2:0]
+(1)TOP.core_tb.core_top.alu_top.req_wb_info.instr_id[2:0]
+(2)TOP.core_tb.core_top.alu_top.req_wb_info.instr_id[2:0]
+@1401200
+-group_end
+@22
+TOP.core_tb.core_top.alu_top.req_wb_info.pc[31:0]
+@28
+TOP.core_tb.core_top.alu_top.req_wb_info.xcpt_alu.xcpt_overflow
+@c00200
+-req_wb_info
+@28
+TOP.core_tb.core_top.alu_top.req_wb_info.rf_wen
+@22
+TOP.core_tb.core_top.alu_top.req_wb_info.rf_dest[4:0]
+TOP.core_tb.core_top.alu_top.req_wb_info.rf_data[31:0]
+@28
+TOP.core_tb.core_top.alu_top.req_wb_info.tlbwrite
+TOP.core_tb.core_top.alu_top.req_wb_info.tlb_id
+@c00200
+-fetch xcpt
+@28
+TOP.core_tb.core_top.alu_top.req_wb_info.xcpt_fetch.xcpt_bus_error
+TOP.core_tb.core_top.alu_top.req_wb_info.xcpt_fetch.xcpt_itlb_miss
+@1401200
+-fetch xcpt
+@800200
+-alu xcpt
+@28
+TOP.core_tb.core_top.alu_top.req_wb_info.xcpt_alu.xcpt_overflow
+@1000200
+-alu xcpt
+@c00200
+-decode xcpt
+@28
+TOP.core_tb.core_top.alu_top.req_wb_info.xcpt_decode.xcpt_illegal_instr
+@1401200
+-decode xcpt
+@c00200
+-mul xcpt
+@28
+TOP.core_tb.core_top.alu_top.req_wb_info.xcpt_mul.xcpt_overflow
+@1401200
+-mul xcpt
+@c00200
+-cache_xcpt
+@28
+TOP.core_tb.core_top.alu_top.req_wb_info.xcpt_cache.xcpt_addr_fault
+TOP.core_tb.core_top.alu_top.req_wb_info.xcpt_cache.xcpt_bus_error
+TOP.core_tb.core_top.alu_top.req_wb_info.xcpt_cache.xcpt_dtlb_miss
+@1401200
+-cache_xcpt
+-req_wb_info
+@28
+TOP.core_tb.core_top.alu_top.req_wb_mem_blocked
+@800200
+-req_wb_dcache_info
+@28
+TOP.core_tb.core_top.alu_top.req_wb_dcache_info.instr_id[2:0]
+@22
+TOP.core_tb.core_top.alu_top.req_wb_dcache_info.pc[31:0]
+@28
+TOP.core_tb.core_top.alu_top.req_wb_dcache_info.is_store
+@c00022
+TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+@28
+(0)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(1)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(2)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(3)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(4)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(5)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(6)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(7)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(8)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(9)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(10)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(11)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(12)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(13)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(14)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(15)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(16)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(17)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(18)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(19)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(20)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(21)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(22)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(23)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(24)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(25)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(26)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(27)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(28)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(29)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(30)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+(31)TOP.core_tb.core_top.alu_top.req_wb_dcache_info.addr[31:0]
+@1401200
+-group_end
+@22
+TOP.core_tb.core_top.alu_top.req_wb_dcache_info.rd_addr[4:0]
+@28
+TOP.core_tb.core_top.alu_top.req_wb_dcache_info.size[1:0]
+@22
+TOP.core_tb.core_top.alu_top.req_wb_dcache_info.data[31:0]
+@1000200
+-req_wb_dcache_info
+@1401200
+-ALU TO WRITEBACK
+@c00200
+-MUL TO WRITEBACK
+@28
+TOP.core_tb.core_top.mul_top.req_wb_valid
+@800200
+-req_wb_info
+@28
+TOP.core_tb.core_top.mul_top.req_wb_info.instr_id[2:0]
+@22
+TOP.core_tb.core_top.mul_top.req_wb_info.pc[31:0]
+TOP.core_tb.core_top.mul_top.req_wb_info.rf_data[31:0]
+TOP.core_tb.core_top.mul_top.req_wb_info.rf_dest[4:0]
+@28
+TOP.core_tb.core_top.mul_top.req_wb_info.rf_wen
+TOP.core_tb.core_top.mul_top.req_wb_info.tlb_id
+TOP.core_tb.core_top.mul_top.req_wb_info.tlbwrite
+TOP.core_tb.core_top.mul_top.req_wb_info.xcpt_mul.xcpt_overflow
+@1000200
+-req_wb_info
+@1401200
+-MUL TO WRITEBACK
+@c00200
+-WRITEBACK TO CACHE
+@28
+TOP.core_tb.core_top.wb_top.reorder_buffer.oldest_pos[2:0]
+TOP.core_tb.core_top.wb_top.reorder_buffer.cache_stage_ready
+TOP.core_tb.core_top.wb_top.reorder_buffer.req_to_dcache_valid
+@800200
+-req_to_dcache_info
+@22
+TOP.core_tb.core_top.wb_top.reorder_buffer.req_to_dcache_info.pc[31:0]
+@28
+TOP.core_tb.core_top.wb_top.reorder_buffer.req_to_dcache_info.instr_id[2:0]
+@22
+TOP.core_tb.core_top.wb_top.reorder_buffer.req_to_dcache_info.addr[31:0]
+TOP.core_tb.core_top.wb_top.reorder_buffer.req_to_dcache_info.rd_addr[4:0]
+@28
+TOP.core_tb.core_top.wb_top.reorder_buffer.req_to_dcache_info.is_store
+TOP.core_tb.core_top.wb_top.reorder_buffer.req_to_dcache_info.size[1:0]
+@22
+TOP.core_tb.core_top.wb_top.reorder_buffer.req_to_dcache_info.data[31:0]
+@1000200
+-req_to_dcache_info
+@1401200
+-WRITEBACK TO CACHE
+@c00200
+-CACHE TO WRITEBACK
+@28
+TOP.core_tb.core_top.cache_top.req_wb_valid
+@22
+TOP.core_tb.core_top.cache_top.req_wb_info.pc[31:0]
+@28
+TOP.core_tb.core_top.cache_top.req_wb_info.instr_id[2:0]
+@800200
+-req_wb_info
+@28
+TOP.core_tb.core_top.cache_top.req_wb_info.rf_wen
+@22
+TOP.core_tb.core_top.cache_top.req_wb_info.rf_dest[4:0]
+TOP.core_tb.core_top.cache_top.req_wb_info.rf_data[31:0]
+@1000200
+-req_wb_info
+@1401200
+-CACHE TO WRITEBACK
+@200
+-
+-
+-
+@c00200
+-others
+-RoB valid arrays
+@28
+TOP.core_tb.core_top.wb_top.reorder_buffer.invalidate_buffer
+TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_tail[2:0]
+TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_tail_ff[2:0]
+TOP.core_tb.core_top.wb_top.reorder_buffer.oldest_pos[2:0]
+@22
+TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_valid[7:0]
+TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_valid_ff[7:0]
+@1401200
+-RoB valid arrays
+@c00200
+-mul signals
+@22
+TOP.core_tb.core_top.mul_top.mul_overflow_data[63:0]
+@800200
+-mul stage 0
+@1000200
+-mul stage 0
+@200
+-
+@c00200
+-mul stage 3
+@1401200
+-mul stage 3
+-mul signals
+@c00200
+-rob saved req
+@28
+TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_tail[2:0]
+TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_tail_ff[2:0]
+@22
+TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_valid[7:0]
+@c00022
+TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_valid_ff[7:0]
+@28
+(0)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_valid_ff[7:0]
+(1)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_valid_ff[7:0]
+(2)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_valid_ff[7:0]
+(3)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_valid_ff[7:0]
+(4)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_valid_ff[7:0]
+(5)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_valid_ff[7:0]
+(6)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_valid_ff[7:0]
+(7)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_valid_ff[7:0]
+@1401200
+-group_end
+@22
+TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked[7:0]
+TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked_ff[7:0]
+@1401200
+-rob saved req
+@c00200
+-ALU STALL PIPELINE
+@800200
+-src1
+@1000200
+-src1
+@c00200
+-src2
+@1401200
+-src2
+-ALU STALL PIPELINE
+@c00200
+-reorder buff - D$ requests
+-push ctrl
+@28
+TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_full
+TOP.core_tb.core_top.wb_top.reorder_buffer.alu_req_valid
+TOP.core_tb.core_top.wb_top.reorder_buffer.mem_instr_blocked
+@1401200
+-push ctrl
+@28
+TOP.core_tb.core_top.wb_top.reorder_buffer.alu_free_pos[2:0]
+@c00022
+TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked[7:0]
+@28
+(0)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked[7:0]
+(1)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked[7:0]
+(2)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked[7:0]
+(3)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked[7:0]
+(4)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked[7:0]
+(5)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked[7:0]
+(6)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked[7:0]
+(7)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked[7:0]
+@1401200
+-group_end
+@c00022
+TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked_ff[7:0]
+@28
+(0)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked_ff[7:0]
+(1)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked_ff[7:0]
+(2)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked_ff[7:0]
+(3)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked_ff[7:0]
+(4)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked_ff[7:0]
+(5)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked_ff[7:0]
+(6)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked_ff[7:0]
+(7)TOP.core_tb.core_top.wb_top.reorder_buffer.reorder_buffer_mem_instr_blocked_ff[7:0]
+@1401200
+-group_end
+-reorder buff - D$ requests
+@c00200
+-decode internal signals
+@28
+TOP.core_tb.core_top.decode_top.fetch_instr_valid
+TOP.core_tb.core_top.decode_top.flush_decode
+TOP.core_tb.core_top.decode_top.stall_decode
+TOP.core_tb.core_top.decode_top.reorder_buffer_tail_next[2:0]
+TOP.core_tb.core_top.decode_top.reorder_buffer_tail_ff[2:0]
+@1401200
+-decode internal signals
+@c00200
+-mul internal signals
+@28
+TOP.core_tb.core_top.mul_top.req_mul_valid
+@c00200
+-req_mul_info
+@22
+TOP.core_tb.core_top.mul_top.req_mul_info.ra_addr[4:0]
+TOP.core_tb.core_top.mul_top.req_mul_info.ra_data[31:0]
+TOP.core_tb.core_top.mul_top.req_mul_info.rb_addr[4:0]
+TOP.core_tb.core_top.mul_top.req_mul_info.rb_data[31:0]
+TOP.core_tb.core_top.mul_top.req_mul_info.rd_addr[4:0]
+@1401200
+-req_mul_info
+@22
+TOP.core_tb.core_top.mul_top.req_mul_pc[31:0]
+@1401200
+-mul internal signals
+@c00200
+-alu internal signals
+@28
+TOP.core_tb.core_top.alu_top.dcache_ready
+TOP.core_tb.core_top.alu_top.flush_alu
+TOP.core_tb.core_top.alu_top.cache_stage_free
+TOP.core_tb.core_top.alu_top.req_wb_valid
+TOP.core_tb.core_top.alu_top.req_alu_valid
+@c00200
+-branch signals
+@28
+TOP.core_tb.core_top.alu_top.take_branch
+TOP.core_tb.core_top.alu_top.iret_instr
+@22
+TOP.core_tb.core_top.alu_top.branch_pc[31:0]
+@1401200
+-branch signals
+-alu internal signals
+@c00200
+-WB ALU SEARCH
+@1401200
+-WB ALU SEARCH
+@c00200
+-cache internal signals
+-dcache - main memory
+@28
+TOP.core_tb.core_top.cache_top.req_valid_miss
+@c00200
+-req_info_miss
+@22
+TOP.core_tb.core_top.cache_top.req_info_miss.addr[19:0]
+@28
+TOP.core_tb.core_top.cache_top.req_info_miss.is_store
+@22
+TOP.core_tb.core_top.cache_top.req_info_miss.data[127:0]
+@1401200
+-req_info_miss
+@28
+TOP.core_tb.core_top.cache_top.rsp_valid_miss
+@22
+TOP.core_tb.core_top.cache_top.rsp_data_miss[127:0]
+@1401200
+-dcache - main memory
+@c00200
+-dTLB 
+@28
+TOP.core_tb.core_top.cache_top.dtlb_req_valid
+@22
+TOP.core_tb.core_top.cache_top.req_info.addr[31:0]
+@28
+TOP.core_tb.core_top.cache_top.dTlb_rsp_valid
+@22
+TOP.core_tb.core_top.cache_top.dTlb_rsp_phy_addr[19:0]
+@1401200
+-dTLB 
+@c00200
+-dCache
+@28
+TOP.core_tb.core_top.cache_top.dcache_req_valid
+@c00200
+-req_dcache_info
+@22
+TOP.core_tb.core_top.cache_top.req_dcache_info.addr[31:0]
+TOP.core_tb.core_top.cache_top.req_dcache_info.data[31:0]
+@28
+TOP.core_tb.core_top.cache_top.req_dcache_info.instr_id[2:0]
+TOP.core_tb.core_top.cache_top.req_dcache_info.is_store
+@22
+TOP.core_tb.core_top.cache_top.req_dcache_info.pc[31:0]
+TOP.core_tb.core_top.cache_top.req_dcache_info.rd_addr[4:0]
+@28
+TOP.core_tb.core_top.cache_top.req_dcache_info.size[1:0]
+@1401200
+-req_dcache_info
+@28
+TOP.core_tb.core_top.cache_top.dcache_rsp_valid
+@22
+TOP.core_tb.core_top.cache_top.rsp_data_dcache[31:0]
+@1401200
+-dCache
+@c00200
+-dcache memories
+@22
+TOP.core_tb.core_top.cache_top.dcache.dCache_valid[3:0]
+TOP.core_tb.core_top.cache_top.dcache.dCache_valid_ff[3:0]
+TOP.core_tb.core_top.cache_top.dcache.dCache_data(0)[127:0]
+TOP.core_tb.core_top.cache_top.dcache.dCache_data_ff(0)[127:0]
+TOP.core_tb.core_top.cache_top.dcache.dCache_data(1)[127:0]
+TOP.core_tb.core_top.cache_top.dcache.dCache_data_ff(1)[127:0]
+TOP.core_tb.core_top.cache_top.dcache.dCache_data(2)[127:0]
+TOP.core_tb.core_top.cache_top.dcache.dCache_data_ff(2)[127:0]
+TOP.core_tb.core_top.cache_top.dcache.dCache_data(3)[127:0]
+TOP.core_tb.core_top.cache_top.dcache.dCache_data_ff(3)[127:0]
+@1401200
+-dcache memories
+-cache internal signals
+-others
+[pattern_trace] 1
+[pattern_trace] 0

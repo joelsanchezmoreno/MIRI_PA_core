@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
     Verilated::commandArgs(argc, argv);
     Verilated::debug(1);
 
-    int trace_en = 0;
+    int trace_en = 1;
     if (trace_en) {
         //core_tb->initializeTracing("trace.vcd");
         core_tb->initializeTracing("trace.fst");
