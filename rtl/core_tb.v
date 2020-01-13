@@ -236,7 +236,12 @@ begin
     	    $readmemh("tests/matrix_multiply/data_in_MxM_A.hex", main_memory, `MM_MATRIX_A_ADDR);
     	    $readmemh("tests/matrix_multiply/data_in_MxM_B.hex", main_memory, `MM_MATRIX_B_ADDR);
         `else
-    	    $readmemh("data_input_file.hex", main_memory, `MM_BOOT_ADDR);
+            `ifdef BUFFER_SUM_TEST
+    	        $readmemh("tests/buffer_sum/buffer_sum.hex", main_memory, `MM_BOOT_ADDR);
+    	        $readmemh("tests/buffer_sum/data_in_buffer_A.hex", main_memory, `MM_ARRAY_A_ADDR);
+            `else
+    	        $readmemh("data_input_file.hex", main_memory, `MM_BOOT_ADDR);
+            `endif
         `endif
          $display("[CORE TB] Main memory loaded.");
          $display("           Source code. PC@'h1000 = %h",main_memory['h1000 >> `ICACHE_RSH_VAL]);
