@@ -13,7 +13,7 @@
 
 // Defines for Matrix Multiply test
 // ------------------------------------
-
+/*
 `define MATRIX_MULTIPLY_TEST
 `define MATRIX_C_ADDR           `PC_WIDTH'h3000
 `define MATRIX_A_ADDR           `PC_WIDTH'h13000
@@ -21,7 +21,7 @@
 `define MM_MATRIX_C_ADDR        (`MATRIX_C_ADDR >> `ICACHE_RSH_VAL)
 `define MM_MATRIX_A_ADDR        (`MATRIX_A_ADDR >> `ICACHE_RSH_VAL)
 `define MM_MATRIX_B_ADDR        (`MATRIX_B_ADDR >> `ICACHE_RSH_VAL)
-
+*/
 // Defines for Buffer Sum test
 // ------------------------------------
 //`define BUFFER_SUM_TEST
