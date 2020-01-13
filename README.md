@@ -1,5 +1,13 @@
 # PA-MIPS-Processor
 
+Processor Description
+--------------------
+
+![Processor Description](figures/PA-SCHEMATICS-core_top_paths_2.png)
+![Core Top Description](figures/PA-SCHEMATICS-core_top.png)
+
+
+
 How to compile?
 
     make clean; 
