@@ -1,4 +1,4 @@
-# PA-MIPS-Processor
+# MIRI Processor Architecture Core Project
 
 Processor Description
 --------------------
